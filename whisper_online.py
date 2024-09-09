@@ -11,7 +11,7 @@ import soundfile as sf
 import math
 
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s', handlers=[logging.StreamHandler(sys.stdout)])
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s', handlers=[logging.StreamHandler(sys.stdout)])
 
 
 @lru_cache
@@ -104,7 +104,7 @@ class FasterWhisperASR(ASRBase):
 
     sep = ""
 
-    def load_model(self, modelsize=None, cache_dir=None, model_dir=None):
+    def load_model(self, modelsize=None, cache_dir="/tmp", model_dir=None):
         from faster_whisper import WhisperModel
         #        logging.getLogger("faster_whisper").setLevel(logger.level)
 
