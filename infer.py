@@ -9,12 +9,7 @@ import sys
 import requests
 
 import whisper_online
-import os
 
-hf_token = os.getenv("Token")
-
-
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s',
                     handlers=[logging.StreamHandler(sys.stdout)])
 
 # Try to import the module
