@@ -1,65 +1,20 @@
-FROM nvidia/cuda:12.2.2-cudnn8-runtime-ubuntu22.04
-
-ENV PYTHON_VERSION=3.11
-
-RUN export DEBIAN_FRONTEND=noninteractive \
-    && apt-get -qq update \
-    && apt-get -qq install --no-install-recommends \
-    python${PYTHON_VERSION} \
-    python${PYTHON_VERSION}-venv \
-    python3-pip \
-    libcublas11 \
-    && rm -rf /var/lib/apt/lists/*
-
-
-# Set up Python environment
-RUN python3 -m pip install --upgrade pip
-
-# Copy the requirements file and install Python packages
-COPY requirements.txt .
-RUN pip install -r requirements.txt
-
-# Install the specific model using faster-whisper
-#RUN python3 -c 'import faster_whisper; m = faster_whisper.WhisperModel("ivrit-ai/faster-whisper-v2-d3-e3")'
-# Set the SENTENCE_TRANSFORMERS_HOME environment variable to a writable directory
-# Set environment variables for cache directories
-ENV SENTENCE_TRANSFORMERS_HOME="/tmp/.cache/sentence_transformers"
-ENV HF_HOME="/tmp/.cache/huggingface"
-
-# Ensure the cache directories exist
-RUN mkdir -p $SENTENCE_TRANSFORMERS_HOME $HF_HOME
-
-
-
-# Add your Python scripts
-COPY infer.py .
-COPY whisper_online.py .
-
-EXPOSE 7860
-# Run the infer.py script when the container starts
-CMD ["python3", "-u", "/infer.py"]
-
-
-
-
-
 # Include Python
-#from python:3.11.1-buster
-#
-## Define your working directory
-#WORKDIR /
-#
-## Install runpod
-#COPY requirements.txt .
-#RUN pip install -r requirements.txt
-#
-#RUN python3 -c 'import faster_whisper; m = faster_whisper.WhisperModel("ivrit-ai/faster-whisper-v2-d3-e3")'
-#
-## Add your file
-#ADD infer.py .
-#ADD whisper_online.py .
-#
-#ENV LD_LIBRARY_PATH="/usr/local/lib/python3.11/site-packages/nvidia/cudnn/lib:/usr/local/lib/python3.11/site-packages/nvidia/cublas/lib"
-#
-## Call your file when your container starts
-#CMD [ "python", "-u", "/infer.py" ]
+from python:3.11.1-buster
+
+# Define your working directory
+WORKDIR /
+
+# Install runpod
+RUN pip install runpod
+RUN pip install torch==2.3.1
+RUN pip install faster-whisper
+
+RUN python3 -c 'import faster_whisper; m = faster_whisper.WhisperModel("ivrit-ai/faster-whisper-v2-d4")'
+
+# Add your file
+ADD infer.py .
+
+ENV LD_LIBRARY_PATH="/usr/local/lib/python3.11/site-packages/nvidia/cudnn/lib:/usr/local/lib/python3.11/site-packages/nvidia/cublas/lib"
+
+# Call your file when your container starts
+CMD [ "python", "-u", "/infer.py" ]

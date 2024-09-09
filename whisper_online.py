@@ -105,15 +105,15 @@ class FasterWhisperASR(ASRBase):
 
     sep = ""
 
-    def load_model(self, modelsize=None, cache_dir=None, model_dir=None):
+    def load_model(self, modelsize=None, cache_dir="/tmp/.cache/huggingface", model_dir=None):
         from faster_whisper import WhisperModel
         #        logging.getLogger("faster_whisper").setLevel(logger.level)
 
         logging.info("Starting model loading process...")
-        logging.debug(f"Model loading parameters - modelsize: {modelsize}, cache_dir: {cache_dir}, model_dir: {model_dir}")
+        logging.info(f"Model loading parameters - modelsize: {modelsize}, cache_dir: {cache_dir}, model_dir: {model_dir}")
 
         if model_dir is not None:
-            logger.debug(
+            logger.info(
                 f"Loading whisper model from model_dir {model_dir}. modelsize and cache_dir parameters are not used.")
             model_size_or_path = model_dir
         elif modelsize is not None:
@@ -123,7 +123,10 @@ class FasterWhisperASR(ASRBase):
 
         try:
             logging.info(f"Loading WhisperModel on device: ")
-            logging.info(f"Cache directory in online: {tempfile.gettempdir()}")  # Log the temp directory
+            os.environ['SENTENCE_TRANSFORMERS_HOME'] = '/tmp/.cache/sentence_transformers'
+            os.environ['HF_HOME'] = '/tmp/.cache/huggingface'
+            # Ensure the cache directory exists
+            os.makedirs(cache_dir, exist_ok=True)
             model = WhisperModel(model_size_or_path, device="cuda", compute_type="float16", download_root=cache_dir)
             logging.info("Model loaded successfully.")
         except Exception as e:
