@@ -7,6 +7,7 @@ import logging
 import torch
 import sys
 import requests
+import os
 
 import whisper_online
 
@@ -37,6 +38,7 @@ logging.info(f"Selected model name: {model_name}")
 try:
     lan = 'he'
     logging.info(f"Attempting to initialize FasterWhisperASR with device: {device}")
+    cache_dir = os.environ.get('XDG_CACHE_HOME', tempfile.gettempdir())
     model = whisper_online.FasterWhisperASR(lan=lan, modelsize=model_name, cache_dir=None, model_dir=None)
     logging.info("FasterWhisperASR model initialized successfully.")
 except Exception as e:
@@ -198,4 +200,4 @@ def transcribe_core_whisper(audio_file):
     logging.info("Transcription core function completed.")
     return ret
 
-runpod.serverless.start({"handler": transcribe_whisper})
+#runpod.serverless.start({"handler": transcribe_whisper})
