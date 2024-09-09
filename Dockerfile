@@ -20,7 +20,13 @@ COPY requirements.txt .
 RUN pip install -r requirements.txt
 
 # Install the specific model using faster-whisper
-RUN python3 -c 'import faster_whisper; m = faster_whisper.WhisperModel("ivrit-ai/faster-whisper-v2-d3-e3")'
+#RUN python3 -c 'import faster_whisper; m = faster_whisper.WhisperModel("ivrit-ai/faster-whisper-v2-d3-e3")'
+# Set the SENTENCE_TRANSFORMERS_HOME environment variable to a writable directory
+ENV SENTENCE_TRANSFORMERS_HOME="/tmp/.cache/sentence_transformers"
+
+# Ensure the cache directory exists
+RUN mkdir -p $SENTENCE_TRANSFORMERS_HOME
+
 
 # Add your Python scripts
 COPY infer.py .
