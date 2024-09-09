@@ -9,6 +9,10 @@ import sys
 import requests
 
 import whisper_online
+import os
+
+hf_token = os.getenv("Token")
+
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s',
                     handlers=[logging.StreamHandler(sys.stdout)])
