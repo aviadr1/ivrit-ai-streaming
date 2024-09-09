@@ -6,6 +6,7 @@ from functools import lru_cache
 import time
 import logging
 import os
+import tempfile
 
 import io
 import soundfile as sf
@@ -122,7 +123,8 @@ class FasterWhisperASR(ASRBase):
 
         try:
             logging.info(f"Loading WhisperModel on device: ")
-            cache_dir = os.environ.get('XDG_CACHE_HOME', tempfile.gettempdir())
+            logging.info(f"Cache directory: {tempfile.gettempdir()}")  # Log the temp directory
+            cache_dir = os.getenv('XDG_CACHE_HOME', tempfile.gettempdir())
             model = WhisperModel(model_size_or_path, device="cuda", compute_type="float16", download_root=cache_dir)
             logging.info("Model loaded successfully.")
         except Exception as e:
