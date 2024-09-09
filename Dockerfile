@@ -19,6 +19,14 @@ RUN python3 -m pip install --upgrade pip
 COPY requirements.txt .
 RUN pip install -r requirements.txt
 
+# Set build arguments for Hugging Face username and API token
+ARG HUGGINGFACE_USERNAME
+ARG HUGGINGFACE_API_TOKEN
+
+# Set environment variables
+ENV HUGGINGFACE_USERNAME=${HUGGINGFACE_USERNAME}
+ENV HUGGINGFACE_API_TOKEN=${HUGGINGFACE_API_TOKEN}
+
 # Install the specific model using faster-whisper
 RUN python3 -c 'import faster_whisper; m = faster_whisper.WhisperModel("ivrit-ai/faster-whisper-v2-d3-e3")'
 

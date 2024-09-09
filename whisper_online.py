@@ -34,7 +34,7 @@ class ASRBase:
 
     # "" for faster-whisper because it emits the spaces when neeeded)
 
-    def __init__(self, lan, modelsize=None, cache_dir=None, model_dir=None, logfile=sys.stderr):
+    def __init__(self, lan, modelsize=None, cache_dir="/tmp", model_dir=None, logfile=sys.stderr):
         self.logfile = logfile
 
         self.transcribe_kargs = {}
