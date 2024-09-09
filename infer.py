@@ -38,8 +38,10 @@ logging.info(f"Selected model name: {model_name}")
 try:
     lan = 'he'
     logging.info(f"Attempting to initialize FasterWhisperASR with device: {device}")
-    #cache_dir = os.environ.get('XDG_CACHE_HOME', tempfile.gettempdir())
-    model = whisper_online.FasterWhisperASR(lan=lan, modelsize=model_name, cache_dir=None, model_dir=None)
+    logging.info(f"Cache directory before: {tempfile.gettempdir()}")  # Log the temp directory
+    cache_dir = os.environ.get('XDG_CACHE_HOME', tempfile.gettempdir())
+    logging.info(f"Cache directory after: {tempfile.gettempdir()}")  # Log the temp directory
+    model = whisper_online.FasterWhisperASR(lan=lan, modelsize=model_name, cache_dir=cache_dir, model_dir=None)
     logging.info("FasterWhisperASR model initialized successfully.")
 except Exception as e:
     logging.error(f"Falied to inilialize faster whisper model {e}")

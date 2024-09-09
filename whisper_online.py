@@ -105,7 +105,7 @@ class FasterWhisperASR(ASRBase):
 
     sep = ""
 
-    def load_model(self, modelsize=None, cache_dir="/tmp", model_dir=None):
+    def load_model(self, modelsize=None, cache_dir=None, model_dir=None):
         from faster_whisper import WhisperModel
         #        logging.getLogger("faster_whisper").setLevel(logger.level)
 
@@ -123,8 +123,7 @@ class FasterWhisperASR(ASRBase):
 
         try:
             logging.info(f"Loading WhisperModel on device: ")
-            logging.info(f"Cache directory: {tempfile.gettempdir()}")  # Log the temp directory
-            cache_dir = os.getenv('XDG_CACHE_HOME', tempfile.gettempdir())
+            logging.info(f"Cache directory in online: {tempfile.gettempdir()}")  # Log the temp directory
             model = WhisperModel(model_size_or_path, device="cuda", compute_type="float16", download_root=cache_dir)
             logging.info("Model loaded successfully.")
         except Exception as e:
