@@ -5,7 +5,7 @@ FROM python:3.11.1-buster
 WORKDIR /
 
 # Create a writable cache directory for Hugging Face
-RUN mkdir -p /hf_cache && chmod -R 777 /app/hf_cache
+RUN mkdir -p /hf_cache && chmod -R 777 /hf_cache
 
 # Set the environment variable for the Hugging Face cache
 ENV HF_HOME=/hf_cache
