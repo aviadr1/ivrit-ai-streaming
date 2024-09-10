@@ -86,6 +86,9 @@ async def transcribe_audio(file: UploadFile = File(...)):
 
     return {"transcription": transcription}
 
+@app.get("/")
+def read_root():
+    return {"message": "Welcome to the Whisper transcription API"}
 
 if __name__ == "__main__":
     # Print when starting the FastAPI server
