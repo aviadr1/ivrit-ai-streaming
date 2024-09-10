@@ -7,7 +7,7 @@ import os
 model = faster_whisper.WhisperModel("ivrit-ai/faster-whisper-v2-d4")
 
 # URL of the audio file (replace this with the actual URL of your audio)
-audio_url = "https://raw.githubusercontent.com/AshDavid12/runpod-serverless-forked/main/me-hebrew.wav"
+audio_url = "https://raw.githubusercontent.com/AshDavid12/runpod-serverless-forked/main/test_hebrew.wav"
 
 # Download the audio file from the URL
 response = requests.get(audio_url)
