@@ -25,12 +25,18 @@ audio_input, _ = sf.read(audio_data)
 
 # Preprocess the audio for Whisper
 inputs = processor(audio_input, return_tensors="pt", sampling_rate=16000)
+attention_mask = inputs['input_features'].ne(processor.tokenizer.pad_token_id).long()
+
+# Move inputs and attention mask to the correct device
 inputs = {key: value.to(device) for key, value in inputs.items()}
+attention_mask = attention_mask.to(device)
 
-# Generate the transcription
+# Generate the transcription with attention mask
 with torch.no_grad():
-    predicted_ids = model.generate(inputs["input_features"])
-
+    predicted_ids = model.generate(
+        inputs["input_features"],
+        attention_mask=attention_mask  # Pass attention mask explicitly
+    )
 # Decode the transcription
 transcription = processor.batch_decode(predicted_ids, skip_special_tokens=True)[0]
 
