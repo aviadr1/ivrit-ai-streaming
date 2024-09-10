@@ -18,4 +18,4 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Command to run the Python transcription script directly
-CMD ["python", "infer.py.py"]
+CMD ["python", "infer.py"]
