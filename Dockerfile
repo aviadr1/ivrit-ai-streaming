@@ -1,5 +1,15 @@
-# Use an official Python runtime as a base image
-FROM python:3.11.1-buster
+FROM nvidia/cuda:12.2.2-cudnn8-runtime-ubuntu22.04
+
+ENV PYTHON_VERSION=3.11
+
+RUN export DEBIAN_FRONTEND=noninteractive \
+    && apt-get -qq update \
+    && apt-get -qq install --no-install-recommends \
+    python${PYTHON_VERSION} \
+    python${PYTHON_VERSION}-venv \
+    python3-pip \
+    libcublas11 \
+    && rm -rf /var/lib/apt/lists/*
 
 # Set the working directory
 WORKDIR /
