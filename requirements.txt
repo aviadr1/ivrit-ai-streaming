@@ -5,4 +5,5 @@ transformers
 soundfile
 faster-whisper
 pydub
+ffmpeg
 
