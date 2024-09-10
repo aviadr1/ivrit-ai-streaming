@@ -1,94 +1,111 @@
+import base64
 import faster_whisper
-import requests
 import tempfile
-import os
+import torch
+import requests
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+from typing import Optional
 
-# Load the faster-whisper model that supports Hebrew
-model = faster_whisper.WhisperModel("ivrit-ai/faster-whisper-v2-d4")
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-# URL of the audio file (replace this with the actual URL of your audio)
-audio_url = "https://raw.githubusercontent.com/AshDavid12/runpod-serverless-forked/main/test_hebrew.wav"
+model_name = 'ivrit-ai/faster-whisper-v2-d4'
+model = faster_whisper.WhisperModel(model_name, device=device)
 
-# Download the audio file from the URL
-response = requests.get(audio_url)
-if response.status_code != 200:
-    raise Exception("Failed to download audio file")
+# Maximum data size: 200MB
+MAX_PAYLOAD_SIZE = 200 * 1024 * 1024
 
-# Create a temporary file to store the audio
-with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp_audio_file:
-    tmp_audio_file.write(response.content)
-    tmp_audio_file_path = tmp_audio_file.name
-
-# Perform the transcription
-segments, info = model.transcribe(tmp_audio_file_path, language="he")
-
-# Print transcription results
-for segment in segments:
-    print(f"[{segment.start:.2f}s - {segment.end:.2f}s] {segment.text}")
-
-# Clean up the temporary file
-os.remove(tmp_audio_file_path)
+app = FastAPI()
 
 
+class InputData(BaseModel):
+    type: str
+    data: Optional[str] = None  # Used for blob input
+    url: Optional[str] = None  # Used for url input
+    api_key: Optional[str] = None
 
 
+def download_file(url, max_size_bytes, output_filename, api_key=None):
+    """
+    Download a file from a given URL with size limit and optional API key.
+    """
+    try:
+        headers = {}
+        if api_key:
+            headers['Authorization'] = f'Bearer {api_key}'
+
+        response = requests.get(url, stream=True, headers=headers)
+        response.raise_for_status()
+
+        file_size = int(response.headers.get('Content-Length', 0))
+
+        if file_size > max_size_bytes:
+            return False
+
+        downloaded_size = 0
+        with open(output_filename, 'wb') as file:
+            for chunk in response.iter_content(chunk_size=8192):
+                downloaded_size += len(chunk)
+                if downloaded_size > max_size_bytes:
+                    return False
+                file.write(chunk)
+
+        return True
+
+    except requests.RequestException as e:
+        print(f"Error downloading file: {e}")
+        return False
 
 
+@app.post("/transcribe")
+async def transcribe(input_data: InputData):
+    datatype = input_data.type
+    if not datatype:
+        raise HTTPException(status_code=400, detail="datatype field not provided. Should be 'blob' or 'url'.")
+
+    if datatype not in ['blob', 'url']:
+        raise HTTPException(status_code=400, detail=f"datatype should be 'blob' or 'url', but is {datatype} instead.")
+
+    api_key = input_data.api_key
+
+    with tempfile.TemporaryDirectory() as d:
+        audio_file = f'{d}/audio.mp3'
+
+        if datatype == 'blob':
+            if not input_data.data:
+                raise HTTPException(status_code=400, detail="Missing 'data' for 'blob' input.")
+            mp3_bytes = base64.b64decode(input_data.data)
+            open(audio_file, 'wb').write(mp3_bytes)
+        elif datatype == 'url':
+            if not input_data.url:
+                raise HTTPException(status_code=400, detail="Missing 'url' for 'url' input.")
+            success = download_file(input_data.url, MAX_PAYLOAD_SIZE, audio_file, api_key)
+            if not success:
+                raise HTTPException(status_code=400, detail=f"Error downloading data from {input_data.url}")
+
+        result = transcribe_core(audio_file)
+        return {"result": result}
 
 
+def transcribe_core(audio_file):
+    print('Transcribing...')
+
+    ret = {'segments': []}
+    segs, _ = model.transcribe(audio_file, language='he', word_timestamps=True)
+    for s in segs:
+        words = [{'start': w.start, 'end': w.end, 'word': w.word, 'probability': w.probability} for w in s.words]
+        seg = {
+            'id': s.id, 'seek': s.seek, 'start': s.start, 'end': s.end, 'text': s.text, 'avg_logprob': s.avg_logprob,
+            'compression_ratio': s.compression_ratio, 'no_speech_prob': s.no_speech_prob, 'words': words
+        }
+        print(seg)
+        ret['segments'].append(seg)
+
+    return ret
 
 
+# Make sure Uvicorn starts correctly when deployed
+if __name__ == "__main__":
+    import uvicorn
 
-
-
-
-
-
-
-
-
-# import torch
-# from transformers import WhisperProcessor, WhisperForConditionalGeneration
-# import requests
-# import soundfile as sf
-# import io
-
-
-# # Load the Whisper model and processor from Hugging Face Model Hub
-# model_name = "openai/whisper-base"
-# processor = WhisperProcessor.from_pretrained(model_name)
-# model = WhisperForConditionalGeneration.from_pretrained(model_name)
-#
-# # Use GPU if available, otherwise use CPU
-# device = "cuda" if torch.cuda.is_available() else "cpu"
-# model.to(device)
-#
-# # URL of the audio file
-# audio_url = "https://www.signalogic.com/melp/EngSamples/Orig/male.wav"
-#
-# # Download the audio file
-# response = requests.get(audio_url)
-# audio_data = io.BytesIO(response.content)
-#
-# # Read the audio using soundfile
-# audio_input, _ = sf.read(audio_data)
-#
-# # Preprocess the audio for Whisper
-# inputs = processor(audio_input, return_tensors="pt", sampling_rate=16000)
-# attention_mask = inputs['input_features'].ne(processor.tokenizer.pad_token_id).long()
-#
-# # Move inputs and attention mask to the correct device
-# inputs = {key: value.to(device) for key, value in inputs.items()}
-# attention_mask = attention_mask.to(device)
-#
-# # Generate the transcription with attention mask
-# with torch.no_grad():
-#     predicted_ids = model.generate(
-#         inputs["input_features"],
-#         attention_mask=attention_mask  # Pass attention mask explicitly
-#     )
-# # Decode the transcription
-# transcription = processor.batch_decode(predicted_ids, skip_special_tokens=True)[0]
-#
-# # Print the transcription result
-# print("Transcription:", transcription)
+    uvicorn.run(app, host="0.0.0.0", port=8080)

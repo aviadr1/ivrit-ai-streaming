@@ -4,4 +4,7 @@ requests
 transformers
 soundfile
 faster-whisper
+torch
+uvicorn
+fastapi
 
