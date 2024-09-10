@@ -2,13 +2,13 @@
 FROM python:3.11.1-buster
 
 # Set the working directory
-WORKDIR /app
+WORKDIR /
 
 # Create a writable cache directory for Hugging Face
-RUN mkdir -p /app/hf_cache && chmod -R 777 /app/hf_cache
+RUN mkdir -p /hf_cache && chmod -R 777 /app/hf_cache
 
 # Set the environment variable for the Hugging Face cache
-ENV HF_HOME=/app/hf_cache
+ENV HF_HOME=/hf_cache
 
 # Copy the requirements.txt file and install the dependencies
 COPY requirements.txt .
