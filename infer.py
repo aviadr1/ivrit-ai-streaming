@@ -1,8 +1,10 @@
 import torch
 from transformers import WhisperProcessor, WhisperForConditionalGeneration
 import soundfile as sf
-from fastapi import FastAPI, File, UploadFile
+from fastapi import FastAPI, File, UploadFile, Form
 import uvicorn
+import requests
+import io
 import os
 from datetime import datetime
 
@@ -30,33 +32,36 @@ model.to(device)
 print(f"Model is using device: {device}")
 
 
-@app.post("/transcribe/")
-async def transcribe_audio(file: UploadFile = File(...)):
-    # Print file upload start
-    print(f"Received audio file: {file.filename}")
-
-    # Save the uploaded file
-    file_location = f"temp_{file.filename}"
+@app.post("/transcribe-url/")
+def transcribe_audio_url(audio_url: str = Form(...)):
+    # Download the audio file from the provided URL
     try:
-        with open(file_location, "wb+") as f:
-            f.write(await file.read())
-        print(f"File saved to: {file_location}")
+        response = requests.get(audio_url)
+        if response.status_code != 200:
+            return {"error": f"Failed to download audio from URL. Status code: {response.status_code}"}
+        print(f"Successfully downloaded audio from URL: {audio_url}")
+        audio_data = io.BytesIO(response.content)  # Store audio data in memory
     except Exception as e:
-        print(f"Error saving the file: {e}")
-        return {"error": f"Error saving the file: {e}"}
+        print(f"Error downloading the audio file: {e}")
+        return {"error": f"Error downloading the audio file: {e}"}
 
-    # Load the audio file and preprocess it
+    # Process the audio
     try:
-        audio_input, _ = sf.read(file_location)
-        print(f"Audio file {file.filename} successfully read.")
+        audio_input, _ = sf.read(audio_data)  # Read the audio from the in-memory BytesIO
+        print(f"Audio file from URL successfully read.")
+    except Exception as e:
+        print(f"Error reading the audio file: {e}")
+        return {"error": f"Error reading the audio file: {e}"}
 
+    # Preprocess the audio for Whisper
+    try:
         inputs = processor(audio_input, return_tensors="pt", sampling_rate=16000)
         print(f"Audio file preprocessed for transcription.")
     except Exception as e:
         print(f"Error processing the audio file: {e}")
         return {"error": f"Error processing the audio file: {e}"}
 
-    # Move inputs to the same device as the model
+    # Move inputs to the appropriate device
     inputs = {key: value.to(device) for key, value in inputs.items()}
     print("Inputs moved to the appropriate device.")
 
@@ -76,13 +81,6 @@ async def transcribe_audio(file: UploadFile = File(...)):
     except Exception as e:
         print(f"Error decoding the transcription: {e}")
         return {"error": f"Error decoding the transcription: {e}"}
-
-    # Clean up the temporary file
-    try:
-        os.remove(file_location)
-        print(f"Temporary file {file_location} deleted.")
-    except Exception as e:
-        print(f"Error deleting the temporary file: {e}")
 
     return {"transcription": transcription}
 
