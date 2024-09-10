@@ -3,4 +3,6 @@ whisper
 requests
 transformers
 soundfile
+faster-whisper
+pydub
 
