@@ -1,5 +1,6 @@
 fastapi
 uvicorn
 torch
+whisper
 transformers
 soundfile
