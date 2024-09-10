@@ -2,7 +2,7 @@
 from python:3.11.1-buster
 
 # Set the working directory
-WORKDIR /
+WORKDIR /app
 
 # Create a writable cache directory for Hugging Face
 RUN mkdir -p /app/hf_cache && chmod -R 777 /app/hf_cache

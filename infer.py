@@ -7,9 +7,14 @@ import os
 import logging
 from datetime import datetime
 
+# Ensure the log directory exists
+log_directory = "/app/logs"
+os.makedirs(log_directory, exist_ok=True)
+
 # Set up logging
+log_file_path = os.path.join(log_directory, "transcription_log.log")
 logging.basicConfig(
-    filename="transcription_log.log",
+    filename=log_file_path,
     format="%(asctime)s - %(levelname)s - %(message)s",
     level=logging.INFO
 )
