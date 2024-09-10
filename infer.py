@@ -6,10 +6,6 @@ import uvicorn
 import os
 from datetime import datetime
 
-# Ensure the log directory exists (optional if needed)
-log_directory = "/app/logs"
-os.makedirs(log_directory, exist_ok=True)
-
 # Initialize FastAPI app
 app = FastAPI()
 
