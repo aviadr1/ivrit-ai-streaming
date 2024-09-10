@@ -4,7 +4,6 @@ import soundfile as sf
 from fastapi import FastAPI, File, UploadFile, Form
 import uvicorn
 import requests
-import io
 import os
 from datetime import datetime
 
@@ -32,7 +31,7 @@ model.to(device)
 print(f"Model is using device: {device}")
 
 
-@app.post("/transcribe-url/")
+@app.post("/transcribe/")
 def transcribe_audio_url(audio_url: str = Form(...)):
     # Download the audio file from the provided URL
     try:
