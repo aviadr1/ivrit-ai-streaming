@@ -4,6 +4,5 @@ torch
 whisper
 python-multipart
 requests
-io
 transformers
 soundfile
