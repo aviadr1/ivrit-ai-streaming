@@ -2,5 +2,6 @@ fastapi
 uvicorn
 torch
 whisper
+python-multipart
 transformers
 soundfile
