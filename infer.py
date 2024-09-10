@@ -4,110 +4,96 @@ import soundfile as sf
 from fastapi import FastAPI, File, UploadFile
 import uvicorn
 import os
-import logging
 from datetime import datetime
 
-# Ensure the log directory exists
+# Ensure the log directory exists (optional if needed)
 log_directory = "/app/logs"
 os.makedirs(log_directory, exist_ok=True)
-
-# Set up logging
-log_file_path = os.path.join(log_directory, "transcription_log.log")
-logging.basicConfig(
-    filename=log_file_path,
-    format="%(asctime)s - %(levelname)s - %(message)s",
-    level=logging.INFO
-)
 
 # Initialize FastAPI app
 app = FastAPI()
 
-# Log initialization of the application
-logging.info("FastAPI application started.")
+# Print initialization of the application
+print("FastAPI application started.")
 
 # Load the Whisper model and processor
 model_name = "openai/whisper-base"
-logging.info(f"Loading Whisper model: {model_name}")
+print(f"Loading Whisper model: {model_name}")
 
 try:
     processor = WhisperProcessor.from_pretrained(model_name)
     model = WhisperForConditionalGeneration.from_pretrained(model_name)
-    logging.info(f"Model {model_name} successfully loaded.")
+    print(f"Model {model_name} successfully loaded.")
 except Exception as e:
-    logging.error(f"Error loading the model: {e}")
+    print(f"Error loading the model: {e}")
     raise e
 
 # Move model to the appropriate device (GPU if available)
 device = "cuda" if torch.cuda.is_available() else "cpu"
 model.to(device)
-logging.info(f"Model is using device: {device}")
+print(f"Model is using device: {device}")
 
 
 @app.post("/transcribe/")
 async def transcribe_audio(file: UploadFile = File(...)):
-    # Log file upload start
-    logging.info(f"Received audio file: {file.filename}")
-    start_time = datetime.now()
+    # Print file upload start
+    print(f"Received audio file: {file.filename}")
 
     # Save the uploaded file
     file_location = f"temp_{file.filename}"
     try:
         with open(file_location, "wb+") as f:
             f.write(await file.read())
-        logging.info(f"File saved to: {file_location}")
+        print(f"File saved to: {file_location}")
     except Exception as e:
-        logging.error(f"Error saving the file: {e}")
+        print(f"Error saving the file: {e}")
         return {"error": f"Error saving the file: {e}"}
 
     # Load the audio file and preprocess it
     try:
         audio_input, _ = sf.read(file_location)
-        logging.info(f"Audio file {file.filename} successfully read.")
+        print(f"Audio file {file.filename} successfully read.")
 
         inputs = processor(audio_input, return_tensors="pt", sampling_rate=16000)
-        logging.info(f"Audio file preprocessed for transcription.")
+        print(f"Audio file preprocessed for transcription.")
     except Exception as e:
-        logging.error(f"Error processing the audio file: {e}")
+        print(f"Error processing the audio file: {e}")
         return {"error": f"Error processing the audio file: {e}"}
 
     # Move inputs to the same device as the model
     inputs = {key: value.to(device) for key, value in inputs.items()}
-    logging.info("Inputs moved to the appropriate device.")
+    print("Inputs moved to the appropriate device.")
 
     # Generate the transcription
     try:
         with torch.no_grad():
             predicted_ids = model.generate(inputs["input_features"])
-        logging.info("Transcription successfully generated.")
+        print("Transcription successfully generated.")
     except Exception as e:
-        logging.error(f"Error during transcription generation: {e}")
+        print(f"Error during transcription generation: {e}")
         return {"error": f"Error during transcription generation: {e}"}
 
     # Decode the transcription
     try:
         transcription = processor.batch_decode(predicted_ids, skip_special_tokens=True)[0]
-        logging.info("Transcription successfully decoded.")
+        print("Transcription successfully decoded.")
     except Exception as e:
-        logging.error(f"Error decoding the transcription: {e}")
+        print(f"Error decoding the transcription: {e}")
         return {"error": f"Error decoding the transcription: {e}"}
 
     # Clean up the temporary file
     try:
         os.remove(file_location)
-        logging.info(f"Temporary file {file_location} deleted.")
+        print(f"Temporary file {file_location} deleted.")
     except Exception as e:
-        logging.error(f"Error deleting the temporary file: {e}")
+        print(f"Error deleting the temporary file: {e}")
 
-    end_time = datetime.now()
-    time_taken = end_time - start_time
-    logging.info(f"Transcription completed in {time_taken.total_seconds()} seconds.")
-
-    return {"transcription": transcription, "processing_time_seconds": time_taken.total_seconds()}
+    return {"transcription": transcription}
 
 
 if __name__ == "__main__":
-    # Log application start
-    logging.info("Starting FastAPI server with Uvicorn...")
+    # Print when starting the FastAPI server
+    print("Starting FastAPI server with Uvicorn...")
 
     # Run the FastAPI app on the default port (7860)
     uvicorn.run(app, host="0.0.0.0", port=7860)
