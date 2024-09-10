@@ -8,7 +8,8 @@ WORKDIR /app
 RUN mkdir -p /app/hf_cache && chmod -R 777 /app/hf_cache
 
 # Set the environment variable for the Hugging Face cache
-ENV TRANSFORMERS_CACHE=/app/hf_cache
+ENV HF_HOME=/app/hf_cache
+
 
 # Copy the requirements.txt file and install the dependencies
 COPY requirements.txt .
