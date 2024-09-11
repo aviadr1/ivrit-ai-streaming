@@ -30,7 +30,6 @@ class InputData(BaseModel):
     type: str
     data: Optional[str] = None  # Used for blob input
     url: Optional[str] = None  # Used for url input
-    api_key: Optional[str] = None
 
 
 def download_file(url, max_size_bytes, output_filename, api_key=None):
@@ -83,9 +82,6 @@ async def transcribe(input_data: InputData):
     if datatype not in ['blob', 'url']:
         logging.error(f'Invalid datatype: {datatype}')
         raise HTTPException(status_code=400, detail=f"datatype should be 'blob' or 'url', but is {datatype} instead.")
-
-    api_key = input_data.api_key
-    logging.debug(f'API key: {api_key}')
 
     with tempfile.TemporaryDirectory() as d:
         audio_file = f'{d}/audio.mp3'
