@@ -26,8 +26,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy the current directory contents into the container at /app
 COPY . .
-# Expose port 8080 for FastAPI
-EXPOSE 8080
 
 # Run FastAPI with Uvicorn
-CMD ["uvicorn", "infer:app", "--host", "0.0.0.0"]
+CMD ["uvicorn", "infer:app", "--host", "0.0.0.0", "--port","7860"]
