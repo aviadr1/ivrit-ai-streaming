@@ -126,7 +126,7 @@ def transcribe_core(audio_file):
             'id': s.id, 'seek': s.seek, 'start': s.start, 'end': s.end, 'text': s.text, 'avg_logprob': s.avg_logprob,
             'compression_ratio': s.compression_ratio, 'no_speech_prob': s.no_speech_prob, 'words': words
         }
-        logging.debug(f'Transcription segment: {seg}')
+        logging.info(f'Transcription segment: {seg}')
         ret['segments'].append(seg)
 
     return ret
