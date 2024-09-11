@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from typing import Optional
 
 # Configure logging
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 logging.info(f'Device selected: {device}')
@@ -73,7 +73,7 @@ def download_file(url, max_size_bytes, output_filename, api_key=None):
 
 @app.post("/transcribe")
 async def transcribe(input_data: InputData):
-    logging.debug(f'Received transcription request with data: {input_data}')
+    logging.INFO(f'Received transcription request with data: {input_data}')
     datatype = input_data.type
     if not datatype:
         logging.error('datatype field not provided')
@@ -100,7 +100,7 @@ async def transcribe(input_data: InputData):
                 logging.error("Missing 'url' for 'url' input")
                 raise HTTPException(status_code=400, detail="Missing 'url' for 'url' input.")
             logging.info(f'Downloading file from URL: {input_data.url}')
-            success = download_file(input_data.url, MAX_PAYLOAD_SIZE, audio_file, api_key)
+            success = download_file(input_data.url, MAX_PAYLOAD_SIZE, audio_file, None)
             if not success:
                 logging.error(f"Error downloading data from {input_data.url}")
                 raise HTTPException(status_code=400, detail=f"Error downloading data from {input_data.url}")
