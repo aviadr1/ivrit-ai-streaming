@@ -70,10 +70,14 @@ def download_file(url, max_size_bytes, output_filename, api_key=None):
         logging.error(f"Error downloading file: {e}")
         return False
 
+@app.get("/")
+async def read_root():
+    return {"message": "This is the Ivrit AI Streaming service."}
+
 
 @app.post("/transcribe")
 async def transcribe(input_data: InputData):
-    logging.INFO(f'Received transcription request with data: {input_data}')
+    logging.info(f'Received transcription request with data: {input_data}')
     datatype = input_data.type
     if not datatype:
         logging.error('datatype field not provided')
