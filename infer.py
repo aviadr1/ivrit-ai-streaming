@@ -184,7 +184,7 @@ def transcribe_core_ws(audio_file, last_transcribed_time):
 
 
 import tempfile
-
+last_transcribed_time = 0.0
 
 @app.websocket("/wtranscribe")
 async def websocket_transcribe(websocket: WebSocket):
@@ -194,8 +194,6 @@ async def websocket_transcribe(websocket: WebSocket):
 
     try:
         processed_segments = []  # Keeps track of the segments already transcribed
-        last_transcribed_time = 0.0
-        #min_transcription_time = 5.0  # Minimum duration of audio in seconds before transcription starts
 
         # A temporary file to store the growing audio data
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_audio_file:
@@ -213,25 +211,21 @@ async def websocket_transcribe(websocket: WebSocket):
                     temp_audio_file.write(audio_chunk)
                     temp_audio_file.flush()
 
-
-                    # Transcribe when enough time (audio) is accumulated (e.g., at least 5 seconds of audio)
-                    #if accumulated_audio_time >= min_transcription_time:
-                    #logging.info("Buffered enough audio time, starting transcription.")
-
-
                     # Call the transcription function with the last processed time
                     partial_result, last_transcribed_time = transcribe_core_ws(temp_audio_file.name, last_transcribed_time)
                     accumulated_audio_time = 0  # Reset the accumulated audio time
-                    processed_segments.extend(partial_result['new_segments'])
 
-                    # Reset the accumulated audio size after transcription
-
-                    # Send the transcription result back to the client with both new and all processed segments
                     response = {
                         "new_segments": partial_result['new_segments'],
                         "processed_segments": processed_segments
                     }
                     logging.info(f"Sending {len(partial_result['new_segments'])} new segments to the client.")
+                    processed_segments.extend(partial_result['new_segments'])
+
+                    # Reset the accumulated audio size after transcription
+
+                    # Send the transcription result back to the client with both new and all processed segments
+
                     await websocket.send_json(response)
 
                 except WebSocketDisconnect:
