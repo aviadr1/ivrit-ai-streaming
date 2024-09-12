@@ -218,12 +218,12 @@ async def websocket_transcribe(websocket: WebSocket):
                     accumulated_audio_time = 0  # Reset the accumulated audio time
 
                     response = {
-                        "new_segments": partial_result,
+                        "new_segments": partial_result['new_segments'],
                         "processed_segments": processed_segments
                     }
                     logging.info(f"Sending {len(partial_result['new_segments'])} new segments to the client.")
-                    processed_segments.extend(partial_result['new_segments'])
                     await websocket.send_json(response)
+                    processed_segments.extend(partial_result['new_segments'])
 
                 except WebSocketDisconnect:
                     logging.info("WebSocket connection closed by the client.")
