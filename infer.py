@@ -12,7 +12,7 @@ from typing import Optional
 import asyncio
 
 # Configure logging
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 logging.info(f'Device selected: {device}')
@@ -159,11 +159,11 @@ def transcribe_core_ws(audio_file, last_transcribed_time):
 
     # Track the new segments and update the last transcribed time
     for s in segs:
-        logging.debug(f"Processing segment with start time: {s.start} and end time: {s.end}")
+        logging.info(f"Processing segment with start time: {s.start} and end time: {s.end}")
 
         # Only process segments that start after the last transcribed time
         if s.start >= last_transcribed_time:
-            logging.debug(f"New segment found starting at {s.start} seconds.")
+            logging.info(f"New segment found starting at {s.start} seconds.")
             words = [{'start': w.start, 'end': w.end, 'word': w.word, 'probability': w.probability} for w in s.words]
 
             seg = {
@@ -203,7 +203,7 @@ async def websocket_transcribe(websocket: WebSocket):
             # Continuously receive and process audio chunks
             while True:
                 try:
-                    logging.debug("Waiting to receive the next chunk of audio data from WebSocket.")
+                    logging.info("Waiting to receive the next chunk of audio data from WebSocket.")
 
                     # Receive the next chunk of audio data
                     audio_chunk = await websocket.receive_bytes()
@@ -243,7 +243,6 @@ async def websocket_transcribe(websocket: WebSocket):
         await websocket.send_json({"error": str(e)})
     finally:
         logging.info("Cleaning up and closing WebSocket connection.")
-        await websocket.close()
 
 
 
