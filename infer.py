@@ -218,7 +218,7 @@ async def websocket_transcribe(websocket: WebSocket):
                     accumulated_audio_time = 0  # Reset the accumulated audio time
 
                     response = {
-                        "new_segments": partial_result['new_segments'],
+                        "new_segments": partial_result,
                         "processed_segments": processed_segments
                     }
                     logging.info(f"Sending {len(partial_result['new_segments'])} new segments to the client.")

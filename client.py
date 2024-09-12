@@ -48,7 +48,7 @@ async def send_audio(websocket):
                     # Send buffered audio data once it's large enough
                     if len(audio_buffer) >= buffer_size:
                         await websocket.send(audio_buffer)
-                        #print(f"Sent {len(audio_buffer)} bytes of audio data.")
+                        print(f"Sent {len(audio_buffer)} bytes of audio data.")
                         audio_buffer.clear()
                         await asyncio.sleep(0.01)
 
@@ -87,7 +87,7 @@ async def run_client():
     ssl_context.check_hostname = False
     ssl_context.verify_mode = ssl.CERT_NONE
 
-    async with websockets.connect(uri, ssl=ssl_context, timeout=120) as websocket:
+    async with websockets.connect(uri, ssl=ssl_context, timeout=600) as websocket:
         await asyncio.gather(
             send_audio(websocket),
             receive_transcription(websocket),
