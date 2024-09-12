@@ -4,7 +4,7 @@ import requests
 import ssl
 
 # Parameters for reading and sending the audio
-AUDIO_FILE_URL = "https://raw.githubusercontent.com/AshDavid12/runpod_serverless_whisper/main/me-hebrew.wav"  # Use WAV file
+AUDIO_FILE_URL = "https://raw.githubusercontent.com/AshDavid12/runpod-serverless-forked/main/test_hebrew.wav"  # Use WAV file
 
 async def send_audio(websocket):
     buffer_size = 512 * 1024  # Buffer audio chunks up to 512KB before sending
@@ -56,7 +56,7 @@ async def run_client():
     ssl_context.check_hostname = False
     ssl_context.verify_mode = ssl.CERT_NONE
 
-    async with websockets.connect(uri, ssl=ssl_context, timeout=30) as websocket:
+    async with websockets.connect(uri, ssl=ssl_context, timeout=60) as websocket:
         await asyncio.gather(
             send_audio(websocket),
             receive_transcription(websocket),
