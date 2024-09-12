@@ -184,7 +184,7 @@ def transcribe_core_ws(audio_file, last_transcribed_time):
 
 
 import tempfile
-last_transcribed_time = 0.0
+
 
 @app.websocket("/wtranscribe")
 async def websocket_transcribe(websocket: WebSocket):
@@ -194,6 +194,7 @@ async def websocket_transcribe(websocket: WebSocket):
 
     try:
         processed_segments = []  # Keeps track of the segments already transcribed
+        last_transcribed_time = 0.0
 
         # A temporary file to store the growing audio data
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_audio_file:
@@ -221,11 +222,6 @@ async def websocket_transcribe(websocket: WebSocket):
                     }
                     logging.info(f"Sending {len(partial_result['new_segments'])} new segments to the client.")
                     processed_segments.extend(partial_result['new_segments'])
-
-                    # Reset the accumulated audio size after transcription
-
-                    # Send the transcription result back to the client with both new and all processed segments
-
                     await websocket.send_json(response)
 
                 except WebSocketDisconnect:
