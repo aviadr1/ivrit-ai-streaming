@@ -193,59 +193,50 @@ async def websocket_transcribe(websocket: WebSocket):
 
     try:
         processed_segments = []  # Keeps track of the segments already transcribed
-        audio_data = bytearray()  # Buffer for audio chunks
-        logging.info("Initialized processed_segments and audio_data buffer.")
+        accumulated_audio_size = 0  # Track how much audio data has been buffered
 
         # A temporary file to store the growing audio data
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_audio_file:
             logging.info(f"Temporary audio file created at {temp_audio_file.name}")
 
-            # Continuously receive and process audio chunks
             while True:
                 try:
-                    logging.info("Waiting to receive the next chunk of audio data from WebSocket.")
-
                     # Receive the next chunk of audio data
                     audio_chunk = await websocket.receive_bytes()
-                    logging.info(f"Received an audio chunk of size {len(audio_chunk)} bytes.")
-
                     if not audio_chunk:
                         logging.warning("Received empty audio chunk, skipping processing.")
                         continue
 
+                    # Write audio chunk to file and accumulate size
                     temp_audio_file.write(audio_chunk)
                     temp_audio_file.flush()
-                    logging.debug(f"Written audio chunk to temporary file: {temp_audio_file.name}")
-
-                    audio_data.extend(audio_chunk)  # In-memory data buffer (if needed)
-                    #logging.debug(f"Audio data buffer extended to size {len(audio_data)} bytes.")
-
-                    # Perform transcription and track new segments
+                    accumulated_audio_size += len(audio_chunk)
                     logging.info(
-                        f"Transcribing audio from {temp_audio_file.name}. Processed segments: {len(processed_segments)}")
-                    partial_result, processed_segments = transcribe_core_ws(temp_audio_file.name, processed_segments)
+                        f"Received and buffered {len(audio_chunk)} bytes, total buffered: {accumulated_audio_size} bytes")
 
-                    logging.info(
-                        f"Transcription completed. Sending {len(partial_result['new_segments'])} new segments to the client.")
-                    # Send the new transcription result back to the client
-                    logging.info(
-                        f"partial result{partial_result}")
-                    await websocket.send_json(partial_result)
+                    # Buffer at least 512KB before transcription
+                    if accumulated_audio_size >= (512 * 1024):  # Adjust this size as needed
+                        logging.info("Buffered enough data, starting transcription.")
+
+                        partial_result, processed_segments = transcribe_core_ws(temp_audio_file.name,
+                                                                                processed_segments)
+                        accumulated_audio_size = 0  # Reset the accumulated audio size
+
+                        # Send the transcription result back to the client
+                        logging.info(f"Sending {len(partial_result['new_segments'])} new segments to the client.")
+                        logging.info(f"partial result {partial_result}")
+                        await websocket.send_json(partial_result)
 
                 except WebSocketDisconnect:
-                    logging.info("WebSocket connection closed by the client. Ending transcription session.")
-                    break
-                except Exception as e:
-                    logging.error(f"Error processing audio chunk: {e}")
-                    await websocket.send_json({"error": str(e)})
+                    logging.info("WebSocket connection closed by the client.")
                     break
 
     except Exception as e:
         logging.error(f"Unexpected error during WebSocket transcription: {e}")
         await websocket.send_json({"error": str(e)})
+
     finally:
         logging.info("Cleaning up and closing WebSocket connection.")
-
 
 
 
