@@ -178,7 +178,7 @@ def transcribe_core_ws(audio_file, last_transcribed_time):
             new_last_transcribed_time = max(new_last_transcribed_time, s.end)
             logging.debug(f"Updated last transcribed time to: {new_last_transcribed_time} seconds")
 
-    logging.info(f"Returning {len(ret['new_segments'])} new segments and updated last transcribed time.")
+    #logging.info(f"Returning {len(ret['new_segments'])} new segments and updated last transcribed time.")
     return ret, new_last_transcribed_time
 
 
@@ -197,7 +197,7 @@ async def websocket_transcribe(websocket: WebSocket):
         logging.info("Initialized processed_segments and audio_data buffer.")
 
         # A temporary file to store the growing audio data
-        with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as temp_audio_file:
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_audio_file:
             logging.info(f"Temporary audio file created at {temp_audio_file.name}")
 
             # Continuously receive and process audio chunks
@@ -218,7 +218,7 @@ async def websocket_transcribe(websocket: WebSocket):
                     logging.debug(f"Written audio chunk to temporary file: {temp_audio_file.name}")
 
                     audio_data.extend(audio_chunk)  # In-memory data buffer (if needed)
-                    logging.debug(f"Audio data buffer extended to size {len(audio_data)} bytes.")
+                    #logging.debug(f"Audio data buffer extended to size {len(audio_data)} bytes.")
 
                     # Perform transcription and track new segments
                     logging.info(
@@ -228,6 +228,8 @@ async def websocket_transcribe(websocket: WebSocket):
                     logging.info(
                         f"Transcription completed. Sending {len(partial_result['new_segments'])} new segments to the client.")
                     # Send the new transcription result back to the client
+                    logging.info(
+                        f"partial result{partial_result}")
                     await websocket.send_json(partial_result)
 
                 except WebSocketDisconnect:
