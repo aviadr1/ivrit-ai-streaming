@@ -176,7 +176,7 @@ def transcribe_core_ws(audio_file, last_transcribed_time):
             ret['new_segments'].append(seg)
 
             # Update the last transcribed time to the end of the current segment
-            new_last_transcribed_time = max(new_last_transcribed_time, s.end)
+            new_last_transcribed_time = s.end
             logging.debug(f"Updated last transcribed time to: {new_last_transcribed_time} seconds")
 
     #logging.info(f"Returning {len(ret['new_segments'])} new segments and updated last transcribed time.")
@@ -194,8 +194,6 @@ async def websocket_transcribe(websocket: WebSocket):
 
     try:
         processed_segments = []  # Keeps track of the segments already transcribed
-        accumulated_audio_size = 0  # Track how much audio data has been buffered
-        accumulated_audio_time = 0  # Track the total audio duration accumulated
         last_transcribed_time = 0.0
         #min_transcription_time = 5.0  # Minimum duration of audio in seconds before transcription starts
 
@@ -214,16 +212,11 @@ async def websocket_transcribe(websocket: WebSocket):
                     # Write audio chunk to file and accumulate size and time
                     temp_audio_file.write(audio_chunk)
                     temp_audio_file.flush()
-                    accumulated_audio_size += len(audio_chunk)
 
-                    # Estimate the duration of the chunk based on its size (e.g., 16kHz audio)
-                    chunk_duration = len(audio_chunk) / (16000 * 2)  # Assuming 16kHz mono WAV (2 bytes per sample)
-                    accumulated_audio_time += chunk_duration
-                    logging.info(f"Received and buffered {len(audio_chunk)} bytes, total buffered: {accumulated_audio_size} bytes, total time: {accumulated_audio_time:.2f} seconds")
 
                     # Transcribe when enough time (audio) is accumulated (e.g., at least 5 seconds of audio)
                     #if accumulated_audio_time >= min_transcription_time:
-                    logging.info("Buffered enough audio time, starting transcription.")
+                    #logging.info("Buffered enough audio time, starting transcription.")
 
 
                     # Call the transcription function with the last processed time
@@ -232,7 +225,6 @@ async def websocket_transcribe(websocket: WebSocket):
                     processed_segments.extend(partial_result['new_segments'])
 
                     # Reset the accumulated audio size after transcription
-                    accumulated_audio_size = 0
 
                     # Send the transcription result back to the client with both new and all processed segments
                     response = {
