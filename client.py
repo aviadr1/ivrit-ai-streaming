@@ -30,6 +30,17 @@ async def receive_transcription(websocket):
             print(f"Error receiving transcription: {e}")
             break
 
+async def send_heartbeat(websocket):
+    while True:
+        try:
+            await websocket.ping()
+            print("Sent keepalive ping")
+        except websockets.ConnectionClosed:
+            print("Connection closed, stopping heartbeat")
+            break
+        await asyncio.sleep(30)  # Send ping every 30 seconds (adjust as needed)
+
+
 async def run_client():
     uri = ("wss://gigaverse-ivrit-ai-streaming.hf.space/ws/transcribe")  # WebSocket URL
     ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
@@ -39,7 +50,8 @@ async def run_client():
     async with websockets.connect(uri, ssl=ssl_context, timeout=30) as websocket:
         await asyncio.gather(
             send_audio(websocket),
-            receive_transcription(websocket)
+            receive_transcription(websocket),
+            send_heartbeat(websocket)
         )
 
 asyncio.run(run_client())

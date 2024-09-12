@@ -12,7 +12,7 @@ from typing import Optional
 import asyncio
 
 # Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s: %(message)s',handlers=[logging.StreamHandler(sys.stdout)])
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 logging.info(f'Device selected: {device}')
