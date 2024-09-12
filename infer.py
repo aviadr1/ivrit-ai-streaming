@@ -164,7 +164,7 @@ def transcribe_core_ws(audio_file, last_transcribed_time):
         logging.info(f"Processing segment with start time: {s.start} and end time: {s.end}")
 
         # Only process segments that start after the last transcribed time
-        if s.start == last_transcribed_time:
+        if s.start >= last_transcribed_time:
             logging.info(f"New segment found starting at {s.start} seconds.")
             for w in words:
                 words.append({'start': w.start, 'end': w.end, 'word': w.word, 'probability': w.probability})

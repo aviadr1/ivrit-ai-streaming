@@ -43,12 +43,12 @@ async def send_audio(websocket):
             for chunk in response.iter_content(chunk_size=1024):  # Stream in chunks
                 if chunk:
                     audio_buffer.extend(chunk)
-                    print(f"Received audio chunk of size {len(chunk)} bytes.")
+                    #print(f"Received audio chunk of size {len(chunk)} bytes.")
 
                     # Send buffered audio data once it's large enough
                     if len(audio_buffer) >= buffer_size:
                         await websocket.send(audio_buffer)
-                        print(f"Sent {len(audio_buffer)} bytes of audio data.")
+                        #print(f"Sent {len(audio_buffer)} bytes of audio data.")
                         audio_buffer.clear()
                         await asyncio.sleep(0.01)
 
@@ -60,11 +60,11 @@ async def receive_transcription(websocket):
     while True:
         try:
             transcription = await websocket.recv()  # Receive transcription from the server
-            new_segments = process_transcription_results(transcription)
-            # Now handle only new segments
-            if new_segments:
-                for segment in new_segments:
-                    print(f"New Segment: {segment['text']}")
+            # new_segments = process_transcription_results(transcription)
+            # # Now handle only new segments
+            # if new_segments:
+            #     for segment in new_segments:
+            #         print(f"New Segment: {segment['text']}")
             print(f"Transcription: {transcription}")
         except Exception as e:
             print(f"Error receiving transcription: {e}")
