@@ -160,13 +160,14 @@ def transcribe_core_ws(audio_file, last_transcribed_time):
 
     # Track the new segments and update the last transcribed time
     for s in segs:
+        words= []
         logging.info(f"Processing segment with start time: {s.start} and end time: {s.end}")
 
         # Only process segments that start after the last transcribed time
         if s.start >= last_transcribed_time:
             logging.info(f"New segment found starting at {s.start} seconds.")
-            words = [{'start': w.start, 'end': w.end, 'word': w.word, 'probability': w.probability} for w in s.words]
-
+            for w in words:
+                words.append({'start': w.start, 'end': w.end, 'word': w.word, 'probability': w.probability})
             seg = {
                 'id': s.id, 'seek': s.seek, 'start': s.start, 'end': s.end, 'text': s.text,
                 'avg_logprob': s.avg_logprob, 'compression_ratio': s.compression_ratio,
@@ -179,7 +180,7 @@ def transcribe_core_ws(audio_file, last_transcribed_time):
             new_last_transcribed_time = s.end
             logging.debug(f"Updated last transcribed time to: {new_last_transcribed_time} seconds")
 
-    #logging.info(f"Returning {len(ret['new_segments'])} new segments and updated last transcribed time.")
+    logging.info(f"Returning {len(ret['new_segments'])} new segments and updated last transcribed time.")
     return ret, new_last_transcribed_time
 
 
