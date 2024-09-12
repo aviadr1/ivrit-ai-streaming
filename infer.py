@@ -227,7 +227,7 @@ async def websocket_transcribe(websocket: WebSocket):
 
 
                     # Call the transcription function with the last processed time
-                    partial_result, last_transcribed_time = transcribe_core_ws(temp_audio_file.name, processed_segments)
+                    partial_result, last_transcribed_time = transcribe_core_ws(temp_audio_file.name, last_transcribed_time)
                     accumulated_audio_time = 0  # Reset the accumulated audio time
                     processed_segments.extend(partial_result['new_segments'])
 
