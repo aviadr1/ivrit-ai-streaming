@@ -7,4 +7,5 @@ faster-whisper
 torch
 uvicorn
 fastapi
+websockets
 

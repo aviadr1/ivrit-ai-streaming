@@ -2,14 +2,17 @@ import base64
 import faster_whisper
 import tempfile
 import torch
+import time
 import requests
 import logging
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, WebSocket,WebSocketDisconnect
+import websockets
 from pydantic import BaseModel
 from typing import Optional
+import asyncio
 
 # Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 logging.info(f'Device selected: {device}')
@@ -130,3 +133,118 @@ def transcribe_core(audio_file):
         ret['segments'].append(seg)
 
     return ret
+
+
+def transcribe_core_ws(audio_file, last_transcribed_time):
+    """
+    Transcribe the audio file and return only the segments that have not been processed yet.
+
+    :param audio_file: Path to the growing audio file.
+    :param last_transcribed_time: The last time (in seconds) that was transcribed.
+    :return: Newly transcribed segments and the updated last transcribed time.
+    """
+    logging.info(f"Starting transcription for file: {audio_file} from {last_transcribed_time} seconds.")
+
+    ret = {'new_segments': []}
+    new_last_transcribed_time = last_transcribed_time
+
+    try:
+        # Transcribe the entire audio file
+        logging.debug(f"Initiating model transcription for file: {audio_file}")
+        segs, _ = model.transcribe(audio_file, language='he', word_timestamps=True)
+        logging.info('Transcription completed successfully.')
+    except Exception as e:
+        logging.error(f"Error during transcription: {e}")
+        raise e
+
+    # Track the new segments and update the last transcribed time
+    for s in segs:
+        logging.debug(f"Processing segment with start time: {s.start} and end time: {s.end}")
+
+        # Only process segments that start after the last transcribed time
+        if s.start >= last_transcribed_time:
+            logging.debug(f"New segment found starting at {s.start} seconds.")
+            words = [{'start': w.start, 'end': w.end, 'word': w.word, 'probability': w.probability} for w in s.words]
+
+            seg = {
+                'id': s.id, 'seek': s.seek, 'start': s.start, 'end': s.end, 'text': s.text,
+                'avg_logprob': s.avg_logprob, 'compression_ratio': s.compression_ratio,
+                'no_speech_prob': s.no_speech_prob, 'words': words
+            }
+            logging.info(f'Adding new transcription segment: {seg}')
+            ret['new_segments'].append(seg)
+
+            # Update the last transcribed time to the end of the current segment
+            new_last_transcribed_time = max(new_last_transcribed_time, s.end)
+            logging.debug(f"Updated last transcribed time to: {new_last_transcribed_time} seconds")
+
+    logging.info(f"Returning {len(ret['new_segments'])} new segments and updated last transcribed time.")
+    return ret, new_last_transcribed_time
+
+
+import tempfile
+
+
+@app.websocket("/ws/transcribe")
+async def websocket_transcribe(websocket: WebSocket):
+    logging.info("New WebSocket connection request received.")
+    await websocket.accept()
+    logging.info("WebSocket connection established successfully.")
+
+    try:
+        processed_segments = []  # Keeps track of the segments already transcribed
+        audio_data = bytearray()  # Buffer for audio chunks
+        logging.info("Initialized processed_segments and audio_data buffer.")
+
+        # A temporary file to store the growing audio data
+        with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as temp_audio_file:
+            logging.info(f"Temporary audio file created at {temp_audio_file.name}")
+
+            # Continuously receive and process audio chunks
+            while True:
+                try:
+                    logging.debug("Waiting to receive the next chunk of audio data from WebSocket.")
+
+                    # Receive the next chunk of audio data
+                    audio_chunk = await websocket.receive_bytes()
+                    logging.info(f"Received an audio chunk of size {len(audio_chunk)} bytes.")
+
+                    if not audio_chunk:
+                        logging.warning("Received empty audio chunk, skipping processing.")
+                        continue
+
+                    temp_audio_file.write(audio_chunk)
+                    temp_audio_file.flush()
+                    logging.debug(f"Written audio chunk to temporary file: {temp_audio_file.name}")
+
+                    audio_data.extend(audio_chunk)  # In-memory data buffer (if needed)
+                    logging.debug(f"Audio data buffer extended to size {len(audio_data)} bytes.")
+
+                    # Perform transcription and track new segments
+                    logging.info(
+                        f"Transcribing audio from {temp_audio_file.name}. Processed segments: {len(processed_segments)}")
+                    partial_result, processed_segments = transcribe_core_ws(temp_audio_file.name, processed_segments)
+
+                    logging.info(
+                        f"Transcription completed. Sending {len(partial_result['new_segments'])} new segments to the client.")
+                    # Send the new transcription result back to the client
+                    await websocket.send_json(partial_result)
+
+                except WebSocketDisconnect:
+                    logging.info("WebSocket connection closed by the client. Ending transcription session.")
+                    break
+                except Exception as e:
+                    logging.error(f"Error processing audio chunk: {e}")
+                    await websocket.send_json({"error": str(e)})
+                    break
+
+    except Exception as e:
+        logging.error(f"Unexpected error during WebSocket transcription: {e}")
+        await websocket.send_json({"error": str(e)})
+    finally:
+        logging.info("Cleaning up and closing WebSocket connection.")
+        await websocket.close()
+
+
+
+
