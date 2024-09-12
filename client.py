@@ -7,15 +7,24 @@ import ssl
 AUDIO_FILE_URL = "https://raw.githubusercontent.com/AshDavid12/runpod_serverless_whisper/main/me-hebrew.wav"  # Use WAV file
 
 async def send_audio(websocket):
-    # Stream the audio file in real-time
+    buffer_size = 512 * 1024  # Buffer audio chunks up to 512KB before sending
+    audio_buffer = bytearray()
+
     with requests.get(AUDIO_FILE_URL, stream=True, allow_redirects=False) as response:
         if response.status_code == 200:
             print("Starting to stream audio file...")
 
-            for chunk in response.iter_content(chunk_size=8192):  # Stream in chunks of 8192 bytes
+            for chunk in response.iter_content(chunk_size=8192):  # Stream in chunks
                 if chunk:
-                    await websocket.send(chunk)  # Send each chunk over WebSocket
-                    print(f"Sent audio chunk of size {len(chunk)} bytes")
+                    audio_buffer.extend(chunk)
+                    print(f"Received audio chunk of size {len(chunk)} bytes.")
+
+                    # Send buffered audio data once it's large enough
+                    if len(audio_buffer) >= buffer_size:
+                        await websocket.send(audio_buffer)
+                        print(f"Sent {len(audio_buffer)} bytes of audio data.")
+                        audio_buffer.clear()
+                        await asyncio.sleep(0.01)
 
             print("Finished sending audio.")
         else:
@@ -42,7 +51,7 @@ async def send_heartbeat(websocket):
 
 
 async def run_client():
-    uri = ("wss://gigaverse-ivrit-ai-streaming.hf.space/ws/transcribe")  # WebSocket URL
+    uri = ("wss://gigaverse-ivrit-ai-streaming.hf.space/wtranscribe")  # WebSocket URL
     ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
     ssl_context.check_hostname = False
     ssl_context.verify_mode = ssl.CERT_NONE

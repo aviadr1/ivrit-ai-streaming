@@ -9,7 +9,7 @@ from fastapi import FastAPI, HTTPException, WebSocket,WebSocketDisconnect
 import websockets
 from pydantic import BaseModel
 from typing import Optional
-import sys 
+import sys
 import asyncio
 
 # Configure logging
@@ -186,7 +186,7 @@ def transcribe_core_ws(audio_file, last_transcribed_time):
 import tempfile
 
 
-@app.websocket("/ws/transcribe")
+@app.websocket("/wtranscribe")
 async def websocket_transcribe(websocket: WebSocket):
     logging.info("New WebSocket connection request received.")
     await websocket.accept()
@@ -195,6 +195,8 @@ async def websocket_transcribe(websocket: WebSocket):
     try:
         processed_segments = []  # Keeps track of the segments already transcribed
         accumulated_audio_size = 0  # Track how much audio data has been buffered
+        accumulated_audio_time = 0  # Track the total audio duration accumulated
+        min_transcription_time = 5.0  # Minimum duration of audio in seconds before transcription starts
 
         # A temporary file to store the growing audio data
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_audio_file:
@@ -208,20 +210,23 @@ async def websocket_transcribe(websocket: WebSocket):
                         logging.warning("Received empty audio chunk, skipping processing.")
                         continue
 
-                    # Write audio chunk to file and accumulate size
+                    # Write audio chunk to file and accumulate size and time
                     temp_audio_file.write(audio_chunk)
                     temp_audio_file.flush()
                     accumulated_audio_size += len(audio_chunk)
-                    logging.info(
-                        f"Received and buffered {len(audio_chunk)} bytes, total buffered: {accumulated_audio_size} bytes")
 
-                    # Buffer at least 512KB before transcription
-                    if accumulated_audio_size >= (512 * 1024):  # Adjust this size as needed
-                        logging.info("Buffered enough data, starting transcription.")
+                    # Estimate the duration of the chunk based on its size (e.g., 16kHz audio)
+                    chunk_duration = len(audio_chunk) / (16000 * 2)  # Assuming 16kHz mono WAV (2 bytes per sample)
+                    accumulated_audio_time += chunk_duration
+                    logging.info(f"Received and buffered {len(audio_chunk)} bytes, total buffered: {accumulated_audio_size} bytes, total time: {accumulated_audio_time:.2f} seconds")
 
-                        partial_result, processed_segments = transcribe_core_ws(temp_audio_file.name,
-                                                                                processed_segments)
-                        accumulated_audio_size = 0  # Reset the accumulated audio size
+                    # Transcribe when enough time (audio) is accumulated (e.g., at least 5 seconds of audio)
+                    if accumulated_audio_time >= min_transcription_time:
+                        logging.info("Buffered enough audio time, starting transcription.")
+
+                        # Call the transcription function with the last processed time
+                        partial_result, processed_segments = transcribe_core_ws(temp_audio_file.name, processed_segments)
+                        accumulated_audio_time = 0  # Reset the accumulated audio time
 
                         # Send the transcription result back to the client
                         logging.info(f"Sending {len(partial_result['new_segments'])} new segments to the client.")
