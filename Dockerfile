@@ -28,4 +28,4 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Run FastAPI with Uvicorn
-CMD ["uvicorn", "infer:app", "--host", "0.0.0.0", "--port","7860","--timeout-keep-alive","300"]
+CMD ["uvicorn", "infer:app", "--host", "0.0.0.0", "--port","7860","--timeout-keep-alive","300","--timeout-graceful-shutdown", "60"]
