@@ -5,7 +5,7 @@ import torch
 import time
 import requests
 import logging
-from fastapi import FastAPI, HTTPException, WebSocket,WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 import websockets
 from pydantic import BaseModel
 from typing import Optional
@@ -13,7 +13,8 @@ import sys
 import asyncio
 
 # Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s: %(message)s',handlers=[logging.StreamHandler(sys.stdout)], force=True)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s: %(message)s',
+                    handlers=[logging.StreamHandler(sys.stdout)], force=True)
 #logging.getLogger("asyncio").setLevel(logging.DEBUG)
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 logging.info(f'Device selected: {device}')
@@ -74,14 +75,13 @@ def download_file(url, max_size_bytes, output_filename, api_key=None):
         logging.error(f"Error downloading file: {e}")
         return False
 
+
 @app.get("/")
 async def read_root():
     return {"message": "This is the Ivrit AI Streaming service."}
 
 
-
-
-def transcribe_core_ws(audio_file, last_transcribed_time):
+async def transcribe_core_ws(audio_file, last_transcribed_time):
     """
     Transcribe the audio file and return only the segments that have not been processed yet.
 
@@ -97,7 +97,8 @@ def transcribe_core_ws(audio_file, last_transcribed_time):
     try:
         # Transcribe the entire audio file
         logging.debug(f"Initiating model transcription for file: {audio_file}")
-        segs, _ = model.transcribe(audio_file, language='he', word_timestamps=True)
+
+        segs, _ = await asyncio.to_thread(model.transcribe, audio_file, language='he', word_timestamps=True)
         logging.info('Transcription completed successfully.')
     except Exception as e:
         logging.error(f"Error during transcription: {e}")
@@ -145,11 +146,11 @@ async def websocket_transcribe(websocket: WebSocket):
         #min_transcription_time = 5.0  # Minimum duration of audio in seconds before transcription starts
 
         # A temporary file to store the growing audio data
-        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_audio_file:
-            logging.info(f"Temporary audio file created at {temp_audio_file.name}")
 
-            while True:
-                try:
+        while True:
+            try:
+                with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_audio_file:
+                    logging.info(f"Temporary audio file created at {temp_audio_file.name}")
                     # Receive the next chunk of audio data
                     audio_chunk = await websocket.receive_bytes()
                     if not audio_chunk:
@@ -165,7 +166,8 @@ async def websocket_transcribe(websocket: WebSocket):
                     chunk_duration = len(audio_chunk) / (16000 * 2)  # Assuming 16kHz mono WAV (2 bytes per sample)
                     accumulated_audio_time += chunk_duration
 
-                    partial_result, last_transcribed_time = transcribe_core_ws(temp_audio_file.name, last_transcribed_time)
+                    partial_result, last_transcribed_time = transcribe_core_ws(temp_audio_file.name,
+                                                                               last_transcribed_time)
                     accumulated_audio_time = 0  # Reset the accumulated audio time
                     processed_segments.extend(partial_result['new_segments'])
 
@@ -180,9 +182,9 @@ async def websocket_transcribe(websocket: WebSocket):
                     logging.info(f"Sending {len(partial_result['new_segments'])} new segments to the client.")
                     await websocket.send_json(response)
 
-                except WebSocketDisconnect:
-                    logging.info("WebSocket connection closed by the client.")
-                    break
+            except WebSocketDisconnect:
+                logging.info("WebSocket connection closed by the client.")
+                break
 
     except Exception as e:
         logging.error(f"Unexpected error during WebSocket transcription: {e}")
@@ -190,5 +192,3 @@ async def websocket_transcribe(websocket: WebSocket):
 
     finally:
         logging.info("Cleaning up and closing WebSocket connection.")
-
-
