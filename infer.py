@@ -81,7 +81,7 @@ async def read_root():
     return {"message": "This is the Ivrit AI Streaming service."}
 
 
-async def transcribe_core_ws(audio_file, last_transcribed_time):
+async def transcribe_core_ws(audio_file):
     """
     Transcribe the audio file and return only the segments that have not been processed yet.
 
@@ -89,10 +89,7 @@ async def transcribe_core_ws(audio_file, last_transcribed_time):
     :param last_transcribed_time: The last time (in seconds) that was transcribed.
     :return: Newly transcribed segments and the updated last transcribed time.
     """
-    logging.info(f"Starting transcription for file: {audio_file} from {last_transcribed_time} seconds.")
-
-    ret = {'new_segments': []}
-    new_last_transcribed_time = last_transcribed_time
+    ret = {'segments': []}
 
     try:
         # Transcribe the entire audio file
@@ -109,24 +106,22 @@ async def transcribe_core_ws(audio_file, last_transcribed_time):
         logging.info(f"Processing segment with start time: {s.start} and end time: {s.end}")
 
         # Only process segments that start after the last transcribed time
-        if s.start >= last_transcribed_time:
-            logging.info(f"New segment found starting at {s.start} seconds.")
-            words = [{'start': w.start, 'end': w.end, 'word': w.word, 'probability': w.probability} for w in s.words]
+        logging.info(f"New segment found starting at {s.start} seconds.")
+        words = [{'start': w.start, 'end': w.end, 'word': w.word, 'probability': w.probability} for w in s.words]
 
-            seg = {
-                'id': s.id, 'seek': s.seek, 'start': s.start, 'end': s.end, 'text': s.text,
-                'avg_logprob': s.avg_logprob, 'compression_ratio': s.compression_ratio,
-                'no_speech_prob': s.no_speech_prob, 'words': words
-            }
-            logging.info(f'Adding new transcription segment: {seg}')
-            ret['new_segments'].append(seg)
+        seg = {
+            'id': s.id, 'seek': s.seek, 'start': s.start, 'end': s.end, 'text': s.text,
+            'avg_logprob': s.avg_logprob, 'compression_ratio': s.compression_ratio,
+            'no_speech_prob': s.no_speech_prob, 'words': words
+        }
+        logging.info(f'Adding new transcription segment: {seg}')
+        ret['segements'].append(seg)
 
-            # Update the last transcribed time to the end of the current segment
-            new_last_transcribed_time = s.end
-            logging.debug(f"Updated last transcribed time to: {new_last_transcribed_time} seconds")
+        # Update the last transcribed time to the end of the current segment
 
-    #logging.info(f"Returning {len(ret['new_segments'])} new segments and updated last transcribed time.")
-    return ret, new_last_transcribed_time
+
+#logging.info(f"Returning {len(ret['new_segments'])} new segments and updated last transcribed time.")
+    return ret
 
 
 import tempfile
@@ -166,21 +161,11 @@ async def websocket_transcribe(websocket: WebSocket):
                     chunk_duration = len(audio_chunk) / (16000 * 2)  # Assuming 16kHz mono WAV (2 bytes per sample)
                     accumulated_audio_time += chunk_duration
 
-                    partial_result, last_transcribed_time = await transcribe_core_ws(temp_audio_file.name,
-                                                                               last_transcribed_time)
+                    partial_result = await transcribe_core_ws(temp_audio_file.name)
                     accumulated_audio_time = 0  # Reset the accumulated audio time
-                    processed_segments.extend(partial_result['new_segments'])
 
-                    # Reset the accumulated audio size after transcription
-                    accumulated_audio_size = 0
 
-                    # Send the transcription result back to the client with both new and all processed segments
-                    response = {
-                        "new_segments": partial_result['new_segments'],
-                        "processed_segments": processed_segments
-                    }
-                    logging.info(f"Sending {len(partial_result['new_segments'])} new segments to the client.")
-                    await websocket.send_json(response)
+                    await websocket.send_json(partial_result)
 
             except WebSocketDisconnect:
                 logging.info("WebSocket connection closed by the client.")
