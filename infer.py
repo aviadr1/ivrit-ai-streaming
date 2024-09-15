@@ -176,7 +176,7 @@ def transcribe_core_ws(audio_file, last_transcribed_time):
             ret['new_segments'].append(seg)
 
             # Update the last transcribed time to the end of the current segment
-            new_last_transcribed_time = max(new_last_transcribed_time, s.end)
+            new_last_transcribed_time = s.end
             logging.debug(f"Updated last transcribed time to: {new_last_transcribed_time} seconds")
 
     #logging.info(f"Returning {len(ret['new_segments'])} new segments and updated last transcribed time.")
@@ -191,6 +191,19 @@ async def websocket_transcribe(websocket: WebSocket):
     logging.info("New WebSocket connection request received.")
     await websocket.accept()
     logging.info("WebSocket connection established successfully.")
+
+    async def send_ping():
+        """Function to send periodic ping to keep the connection alive."""
+        while True:
+            try:
+                await websocket.ping()
+                logging.info("Sent keepalive ping to client.")
+                await asyncio.sleep(10)  # Ping every 10 seconds (adjust the interval as needed)
+            except Exception as e:
+                logging.error(f"Error sending ping: {e}")
+                break
+
+    ping_task = asyncio.create_task(send_ping())
 
     try:
         processed_segments = []  # Keeps track of the segments already transcribed
