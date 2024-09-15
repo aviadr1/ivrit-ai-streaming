@@ -166,7 +166,7 @@ async def websocket_transcribe(websocket: WebSocket):
                     chunk_duration = len(audio_chunk) / (16000 * 2)  # Assuming 16kHz mono WAV (2 bytes per sample)
                     accumulated_audio_time += chunk_duration
 
-                    partial_result, last_transcribed_time = transcribe_core_ws(temp_audio_file.name,
+                    partial_result, last_transcribed_time = await transcribe_core_ws(temp_audio_file.name,
                                                                                last_transcribed_time)
                     accumulated_audio_time = 0  # Reset the accumulated audio time
                     processed_segments.extend(partial_result['new_segments'])
