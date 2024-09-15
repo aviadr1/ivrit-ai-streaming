@@ -9,7 +9,7 @@ AUDIO_FILE_URL = "https://raw.githubusercontent.com/AshDavid12/hugging_face_ivri
 
 
 async def send_audio(websocket):
-    buffer_size = 16 * 1024  #HAVE TO HAVE 512!!
+    buffer_size = 512 * 1024  #HAVE TO HAVE 512!!
     audio_buffer = bytearray()
 
     with requests.get(AUDIO_FILE_URL, stream=True, allow_redirects=False) as response:
