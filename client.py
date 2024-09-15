@@ -6,8 +6,10 @@ import ssl
 # Parameters for reading and sending the audio
 #AUDIO_FILE_URL = "https://raw.githubusercontent.com/AshDavid12/runpod-serverless-forked/main/test_hebrew.wav"  # Use WAV file
 AUDIO_FILE_URL = "https://raw.githubusercontent.com/AshDavid12/hugging_face_ivrit_streaming/main/long_hebrew.wav"
+
+
 async def send_audio(websocket):
-    buffer_size = 512*1024  #HAVE TO HAVE 512!!
+    buffer_size = 16 * 1024  #HAVE TO HAVE 512!!
     audio_buffer = bytearray()
 
     with requests.get(AUDIO_FILE_URL, stream=True, allow_redirects=False) as response:
@@ -30,17 +32,19 @@ async def send_audio(websocket):
         else:
             print(f"Failed to download audio file. Status code: {response.status_code}")
 
+
 async def receive_transcription(websocket):
     while True:
         try:
 
-            transcription = await asyncio.wait_for(websocket.recv(),timeout=300)
-              # Receive transcription from the server
+            transcription = await asyncio.wait_for(websocket.recv(), timeout=300)
+            # Receive transcription from the server
             print(f"Transcription: {transcription}")
         except Exception as e:
             print(f"Error receiving transcription: {e}")
             await asyncio.sleep(30)
             break
+
 
 async def send_heartbeat(websocket):
     while True:
@@ -60,13 +64,19 @@ async def run_client():
     ssl_context.verify_mode = ssl.CERT_NONE
     while True:
         try:
-            async with websockets.connect(uri, ssl=ssl_context, ping_timeout=120,ping_interval=None) as websocket:
+            async with websockets.connect(uri, ssl=ssl_context, ping_timeout=500, ping_interval=20) as websocket:
                 await asyncio.gather(
                     send_audio(websocket),
                     receive_transcription(websocket),
-                    send_heartbeat(websocket)
+                    #send_heartbeat(websocket)
                 )
         except websockets.ConnectionClosedError as e:
-            print(f"web closed :{e}")
+            print(f"WebSocket closed with error: {e}")
+        except Exception as e:
+            print(f"Unexpected error: {e}")
 
-asyncio.run(run_client())
+        print("Reconnecting in 5 seconds...")
+        await asyncio.sleep(5)  # Wait 5 seconds before reconnecting
+
+if __name__ == "__main__":
+    asyncio.run(run_client())
