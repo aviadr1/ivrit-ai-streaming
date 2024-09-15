@@ -13,8 +13,8 @@ import sys
 import asyncio
 
 # Configure logging
-#logging.basicConfig(level=logging.DEBUG, format='%(asctime)s %(levelname)s: %(message)s',handlers=[logging.StreamHandler(sys.stdout)])
-logging.getLogger("asyncio").setLevel(logging.DEBUG)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s: %(message)s',handlers=[logging.StreamHandler(sys.stdout)], force=True)
+#logging.getLogger("asyncio").setLevel(logging.DEBUG)
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 logging.info(f'Device selected: {device}')
 
@@ -79,61 +79,6 @@ async def read_root():
     return {"message": "This is the Ivrit AI Streaming service."}
 
 
-@app.post("/transcribe")
-async def transcribe(input_data: InputData):
-    logging.info(f'Received transcription request with data: {input_data}')
-    datatype = input_data.type
-    if not datatype:
-        logging.error('datatype field not provided')
-        raise HTTPException(status_code=400, detail="datatype field not provided. Should be 'blob' or 'url'.")
-
-    if datatype not in ['blob', 'url']:
-        logging.error(f'Invalid datatype: {datatype}')
-        raise HTTPException(status_code=400, detail=f"datatype should be 'blob' or 'url', but is {datatype} instead.")
-
-    with tempfile.TemporaryDirectory() as d:
-        audio_file = f'{d}/audio.mp3'
-        logging.debug(f'Created temporary directory: {d}')
-
-        if datatype == 'blob':
-            if not input_data.data:
-                logging.error("Missing 'data' for 'blob' input")
-                raise HTTPException(status_code=400, detail="Missing 'data' for 'blob' input.")
-            logging.info('Decoding base64 blob data')
-            mp3_bytes = base64.b64decode(input_data.data)
-            open(audio_file, 'wb').write(mp3_bytes)
-            logging.info(f'Audio file written: {audio_file}')
-        elif datatype == 'url':
-            if not input_data.url:
-                logging.error("Missing 'url' for 'url' input")
-                raise HTTPException(status_code=400, detail="Missing 'url' for 'url' input.")
-            logging.info(f'Downloading file from URL: {input_data.url}')
-            success = download_file(input_data.url, MAX_PAYLOAD_SIZE, audio_file, None)
-            if not success:
-                logging.error(f"Error downloading data from {input_data.url}")
-                raise HTTPException(status_code=400, detail=f"Error downloading data from {input_data.url}")
-
-        result = transcribe_core(audio_file)
-        return {"result": result}
-
-
-def transcribe_core(audio_file):
-    logging.info('Starting transcription...')
-    ret = {'segments': []}
-
-    segs, _ = model.transcribe(audio_file, language='he', word_timestamps=True)
-    logging.info('Transcription completed')
-
-    for s in segs:
-        words = [{'start': w.start, 'end': w.end, 'word': w.word, 'probability': w.probability} for w in s.words]
-        seg = {
-            'id': s.id, 'seek': s.seek, 'start': s.start, 'end': s.end, 'text': s.text, 'avg_logprob': s.avg_logprob,
-            'compression_ratio': s.compression_ratio, 'no_speech_prob': s.no_speech_prob, 'words': words
-        }
-        logging.info(f'Transcription segment: {seg}')
-        ret['segments'].append(seg)
-
-    return ret
 
 
 def transcribe_core_ws(audio_file, last_transcribed_time):
@@ -219,14 +164,7 @@ async def websocket_transcribe(websocket: WebSocket):
                     # Estimate the duration of the chunk based on its size (e.g., 16kHz audio)
                     chunk_duration = len(audio_chunk) / (16000 * 2)  # Assuming 16kHz mono WAV (2 bytes per sample)
                     accumulated_audio_time += chunk_duration
-                    #logging.info(f"Received and buffered {len(audio_chunk)} bytes, total buffered: {accumulated_audio_size} bytes, total time: {accumulated_audio_time:.2f} seconds")
 
-                    # Transcribe when enough time (audio) is accumulated (e.g., at least 5 seconds of audio)
-                    #if accumulated_audio_time >= min_transcription_time:
-                    #logging.info("Buffered enough audio time, starting transcription.")
-
-
-                    # Call the transcription function with the last processed time
                     partial_result, last_transcribed_time = transcribe_core_ws(temp_audio_file.name, last_transcribed_time)
                     accumulated_audio_time = 0  # Reset the accumulated audio time
                     processed_segments.extend(partial_result['new_segments'])

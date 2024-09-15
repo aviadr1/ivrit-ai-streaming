@@ -16,7 +16,7 @@ async def send_audio(websocket):
         if response.status_code == 200:
             print("Starting to stream audio file...")
 
-            for chunk in response.iter_content(chunk_size=512):  # Stream in chunks
+            for chunk in response.iter_content(chunk_size=1024):  # Stream in chunks
                 if chunk:
                     audio_buffer.extend(chunk)
                     #print(f"Received audio chunk of size {len(chunk)} bytes.")
@@ -26,7 +26,7 @@ async def send_audio(websocket):
                         await websocket.send(audio_buffer)
                         #print(f"Sent {len(audio_buffer)} bytes of audio data.")
                         audio_buffer.clear()
-                        await asyncio.sleep(0.001)
+                        await asyncio.sleep(0.01)
 
             print("Finished sending audio.")
         else:
@@ -37,12 +37,12 @@ async def receive_transcription(websocket):
     while True:
         try:
 
-            transcription = await asyncio.wait_for(websocket.recv(), timeout=300)
+            transcription = await websocket.recv()
             # Receive transcription from the server
             print(f"Transcription: {transcription}")
         except Exception as e:
             print(f"Error receiving transcription: {e}")
-            await asyncio.sleep(30)
+            #await asyncio.sleep(30)
             break
 
 
@@ -54,7 +54,7 @@ async def send_heartbeat(websocket):
         except websockets.ConnectionClosed:
             print("Connection closed, stopping heartbeat")
             break
-        await asyncio.sleep(3)  # Send ping every 30 seconds (adjust as needed)
+        await asyncio.sleep(30)  # Send ping every 30 seconds (adjust as needed)
 
 
 async def run_client():
@@ -64,19 +64,18 @@ async def run_client():
     ssl_context.verify_mode = ssl.CERT_NONE
     while True:
         try:
-            async with websockets.connect(uri, ssl=ssl_context, ping_timeout=500, ping_interval=20) as websocket:
+            async with websockets.connect(uri, ssl=ssl_context, ping_timeout=1000, ping_interval=50) as websocket:
                 await asyncio.gather(
                     send_audio(websocket),
                     receive_transcription(websocket),
-                    #send_heartbeat(websocket)
+                    send_heartbeat(websocket)
                 )
         except websockets.ConnectionClosedError as e:
             print(f"WebSocket closed with error: {e}")
-        except Exception as e:
-            print(f"Unexpected error: {e}")
+        # except Exception as e:
+        #     print(f"Unexpected error: {e}")
+        #
+        # print("Reconnecting in 5 seconds...")
+        # await asyncio.sleep(5)  # Wait 5 seconds before reconnecting
 
-        print("Reconnecting in 5 seconds...")
-        await asyncio.sleep(5)  # Wait 5 seconds before reconnecting
-
-if __name__ == "__main__":
-    asyncio.run(run_client())
+asyncio.run(run_client())
