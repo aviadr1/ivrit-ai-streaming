@@ -144,7 +144,7 @@ async def websocket_transcribe(websocket: WebSocket):
 
         while True:
             try:
-                with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_audio_file:
+                with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_audio_file: ##new temp file for every chunk
                     logging.info(f"Temporary audio file created at {temp_audio_file.name}")
                     # Receive the next chunk of audio data
                     audio_chunk = await websocket.receive_bytes()
@@ -161,10 +161,8 @@ async def websocket_transcribe(websocket: WebSocket):
                     chunk_duration = len(audio_chunk) / (16000 * 2)  # Assuming 16kHz mono WAV (2 bytes per sample)
                     accumulated_audio_time += chunk_duration
 
-                    partial_result = await transcribe_core_ws(temp_audio_file.name)
+                    partial_result = await transcribe_core_ws(temp_audio_file)
                     accumulated_audio_time = 0  # Reset the accumulated audio time
-
-
                     await websocket.send_json(partial_result)
 
             except WebSocketDisconnect:

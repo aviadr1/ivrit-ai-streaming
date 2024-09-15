@@ -22,11 +22,11 @@ async def send_audio(websocket):
                     #print(f"Received audio chunk of size {len(chunk)} bytes.")
 
                     # Send buffered audio data once it's large enough
-                    if len(audio_buffer) >= buffer_size:
-                        await websocket.send(audio_buffer)
+                    #if len(audio_buffer) >= buffer_size:
+                    await websocket.send(audio_buffer)
                         #print(f"Sent {len(audio_buffer)} bytes of audio data.")
-                        audio_buffer.clear()
-                        await asyncio.sleep(0.01)
+                    audio_buffer.clear()
+                    await asyncio.sleep(0.01)
 
             print("Finished sending audio.")
         else:
