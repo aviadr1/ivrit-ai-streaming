@@ -13,7 +13,7 @@ import sys
 import asyncio
 
 # Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s: %(message)s',handlers=[logging.StreamHandler(sys.stdout)])
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s %(levelname)s: %(message)s',handlers=[logging.StreamHandler(sys.stdout)])
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 logging.info(f'Device selected: {device}')
@@ -191,19 +191,6 @@ async def websocket_transcribe(websocket: WebSocket):
     logging.info("New WebSocket connection request received.")
     await websocket.accept()
     logging.info("WebSocket connection established successfully.")
-
-    async def send_ping():
-        """Function to send periodic ping to keep the connection alive."""
-        while True:
-            try:
-                await websocket.ping()
-                logging.info("Sent keepalive ping to client.")
-                await asyncio.sleep(10)  # Ping every 10 seconds (adjust the interval as needed)
-            except Exception as e:
-                logging.error(f"Error sending ping: {e}")
-                break
-
-    ping_task = asyncio.create_task(send_ping())
 
     try:
         processed_segments = []  # Keeps track of the segments already transcribed

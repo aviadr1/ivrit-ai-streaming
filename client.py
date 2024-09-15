@@ -50,7 +50,7 @@ async def send_heartbeat(websocket):
         except websockets.ConnectionClosed:
             print("Connection closed, stopping heartbeat")
             break
-        await asyncio.sleep(600)  # Send ping every 30 seconds (adjust as needed)
+        await asyncio.sleep(3)  # Send ping every 30 seconds (adjust as needed)
 
 
 async def run_client():
@@ -58,12 +58,15 @@ async def run_client():
     ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
     ssl_context.check_hostname = False
     ssl_context.verify_mode = ssl.CERT_NONE
-
-    async with websockets.connect(uri, ssl=ssl_context, ping_timeout=120,ping_interval=10) as websocket:
-        await asyncio.gather(
-            send_audio(websocket),
-            receive_transcription(websocket),
-            send_heartbeat(websocket)
-        )
+    while True:
+        try:
+            async with websockets.connect(uri, ssl=ssl_context, ping_timeout=120,ping_interval=None) as websocket:
+                await asyncio.gather(
+                    send_audio(websocket),
+                    receive_transcription(websocket),
+                    send_heartbeat(websocket)
+                )
+        except websockets.ConnectionClosedError as e:
+            print(f"web closed :{e}")
 
 asyncio.run(run_client())
