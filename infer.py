@@ -193,6 +193,8 @@ async def websocket_transcribe(websocket: WebSocket):
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_audio_file:
             logging.info(f"Temporary audio file created at {temp_audio_file.name}")
             #temp_audio_filename = os.path.basename(temp_audio_file.name)
+            output_directory = "/tmp"
+            os.makedirs(output_directory, exist_ok=True)
 
             while True:
                 try:
@@ -204,7 +206,7 @@ async def websocket_transcribe(websocket: WebSocket):
 
                     chunk_counter = 0
                     # Create a new file for the chunk
-                    chunk_filename = f"audio_chunk_{chunk_counter}.wav"
+                    chunk_filename = os.path.join(output_directory, f"audio_chunk_{chunk_counter}.wav")
                     chunk_counter += 1
                     with open(chunk_filename, 'wb') as audio_file:
                         audio_file.write(audio_chunk)
@@ -235,7 +237,7 @@ async def websocket_transcribe(websocket: WebSocket):
                     response = {
                         "new_segments": partial_result['new_segments'],
                         "processed_segments": processed_segments,
-                        "download_url": f"https://gigaverse-ivrit-ai-streaming.hf.space/download_audio/{chunk_filename}"
+                        "download_url": f"https://gigaverse-ivrit-ai-streaming.hf.space/download_audio/{os.path.basename(chunk_filename)})"
                     }
                     logging.info(f"Sending {len(partial_result['new_segments'])} new segments to the client.")
                     await websocket.send_json(response)
