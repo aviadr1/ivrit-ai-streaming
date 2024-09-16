@@ -1,4 +1,7 @@
 import asyncio
+import io
+
+import numpy as np
 import websockets
 import requests
 import ssl
@@ -7,21 +10,24 @@ import logging
 import sys
 
 # Parameters for reading and sending the audio
-AUDIO_FILE_URL = "https://raw.githubusercontent.com/AshDavid12/runpod-serverless-forked/main/test_hebrew.wav"  # Use WAV file
-#AUDIO_FILE_URL = "https://raw.githubusercontent.com/AshDavid12/hugging_face_ivrit_streaming/main/long_hebrew.wav"
+#AUDIO_FILE_URL = "https://raw.githubusercontent.com/AshDavid12/runpod-serverless-forked/main/test_hebrew.wav"  # Use WAV file
+AUDIO_FILE_URL = "https://raw.githubusercontent.com/AshDavid12/hugging_face_ivrit_streaming/main/long_hebrew.wav"
 
 
 
 # Set up logging
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s %(levelname)s: %(message)s',
+logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s: %(message)s',
                     handlers=[logging.StreamHandler(sys.stdout)], force=True)
 logger = logging.getLogger(__name__)
 
 async def send_receive():
     uri = "wss://gigaverse-ivrit-ai-streaming.hf.space/ws"  # Update with your server's address if needed
+    ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    ssl_context.check_hostname = False
+    ssl_context.verify_mode = ssl.CERT_NONE
     logger.info(f"Connecting to server at {uri}")
     try:
-        async with websockets.connect(uri) as websocket:
+        async with websockets.connect(uri,ssl=ssl_context) as websocket:
             logger.info("WebSocket connection established")
             # Start tasks for sending and receiving
             send_task = asyncio.create_task(send_audio(websocket))
@@ -31,49 +37,39 @@ async def send_receive():
         logger.error(f"WebSocket connection error: {e}")
 
 async def send_audio(websocket):
-    wav_file = 'path/to/your/audio.wav'  # Replace with the path to your WAV file
+    wav_file = AUDIO_FILE_URL  # Replace with the path to your WAV file
     logger.info(f"Opening WAV file: {wav_file}")
 
     try:
-        # Open the WAV file
-        wf = wave.open(wav_file, 'rb')
+        # Download the WAV file
+        response = requests.get(wav_file)
+        response.raise_for_status()
+        wav_bytes = io.BytesIO(response.content)
 
-        # Log WAV file parameters
-        channels = wf.getnchannels()
-        sampwidth = wf.getsampwidth()
-        framerate = wf.getframerate()
-        nframes = wf.getnframes()
-        duration = nframes / framerate
-        logger.debug(f"WAV file parameters: channels={channels}, sample_width={sampwidth}, framerate={framerate}, frames={nframes}, duration={duration:.2f}s")
 
-        # Ensure the WAV file has the expected parameters
-        if channels != 1 or sampwidth != 2 or framerate != 16000:
-            logger.error("WAV file must be mono channel, 16-bit samples, 16kHz sampling rate")
-            return
-
-        chunk_duration = 0.1  # in seconds
-        chunk_size = int(framerate * chunk_duration)
-        logger.info(f"Starting to send audio data in chunks of {chunk_duration}s ({chunk_size} frames)")
+        # Send audio data in chunks directly from the WAV file
+        chunk_size = 1024  # Sending data in chunks of 3200 bytes, which can be adjusted
 
         total_chunks = 0
         total_bytes_sent = 0
 
+        # While loop to send audio data chunk by chunk
         while True:
-            data = wf.readframes(chunk_size)
-            if not data:
-                logger.info("End of WAV file reached")
+            chunk = wav_bytes.read(chunk_size)
+            if not chunk:
                 break
-            await websocket.send(data)
+            await websocket.send(chunk)
             total_chunks += 1
-            total_bytes_sent += len(data)
-            logger.debug(f"Sent chunk {total_chunks}: {len(data)} bytes")
-            await asyncio.sleep(chunk_duration)  # Simulate real-time streaming
+            total_bytes_sent += len(chunk)
+            logger.debug(f"Sent chunk {total_chunks}: {len(chunk)} bytes")
+            await asyncio.sleep(0.1)  # Simulate real-time streamin
+            logger.info(
+                f"Finished sending audio data: {total_chunks} chunks sent, total bytes sent: {total_bytes_sent}")
 
-        logger.info(f"Finished sending audio data: {total_chunks} chunks sent, total bytes sent: {total_bytes_sent}")
     except Exception as e:
         logger.error(f"Send audio error: {e}")
+
     finally:
-        wf.close()
         logger.info("WAV file closed")
 
 async def receive_transcriptions(websocket):

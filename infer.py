@@ -15,7 +15,7 @@ import sys
 import asyncio
 
 # Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s: %(message)s',
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s %(levelname)s: %(message)s',
                     handlers=[logging.StreamHandler(sys.stdout)], force=True)
 logger = logging.getLogger(__name__)
 #logging.getLogger("asyncio").setLevel(logging.DEBUG)
@@ -129,6 +129,7 @@ async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     client_ip = websocket.client.host
     logger.info(f"Client connected: {client_ip}")
+    sys.stdout.flush()
     try:
         await process_audio_stream(websocket)
     except WebSocketDisconnect:
