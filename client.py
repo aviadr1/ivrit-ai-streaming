@@ -1,5 +1,6 @@
 import asyncio
 import io
+import json
 
 import numpy as np
 import websockets
@@ -8,6 +9,8 @@ import ssl
 import wave
 import logging
 import sys
+import sounddevice as sd
+
 
 # Parameters for reading and sending the audio
 #AUDIO_FILE_URL = "https://raw.githubusercontent.com/AshDavid12/runpod-serverless-forked/main/test_hebrew.wav"  # Use WAV file
@@ -35,41 +38,26 @@ async def send_receive():
             await asyncio.gather(send_task, receive_task)
     except Exception as e:
         logger.error(f"WebSocket connection error: {e}")
+max_size_bytes = 50_000_000  # 10 MB
 
-async def send_audio(websocket):
-    wav_file = AUDIO_FILE_URL  # Replace with the path to your WAV file
-    logger.info(f"Opening WAV file: {wav_file}")
+SAMPLE_RATE = 16000
+CHUNK_SIZE =1024
 
-    try:
-        # Download the WAV file
-        response = requests.get(wav_file)
-        response.raise_for_status()
-        wav_bytes = io.BytesIO(response.content)
+async def send_audio_chunks(websocket):
+    """Capture audio and send chunks to the server via WebSocket."""
 
+    def audio_callback(indata, frames, time, status):
+        """Callback function called when new audio is available."""
+        # Convert the audio input to a JSON-serializable format (e.g., list of samples)
+        audio_chunk = indata[:, 0].tolist()  # Use only the first channel
+        asyncio.run_coroutine_threadsafe(
+            websocket.send(json.dumps(audio_chunk)), asyncio.get_event_loop()
+        )
 
-        # Send audio data in chunks directly from the WAV file
-        chunk_size = 1024  # Sending data in chunks of 3200 bytes, which can be adjusted
+    # Start the audio stream
+    with sd.InputStream(callback=audio_callback, channels=1, samplerate=SAMPLE_RATE, blocksize=CHUNK_SIZE):
+        await asyncio.Future()  # Keep the stream open and running
 
-        total_chunks = 0
-        total_bytes_sent = 0
-
-        # While loop to send audio data chunk by chunk
-        while True:
-            chunk = wav_bytes.read(chunk_size)
-            if not chunk:
-                break
-            await websocket.send(chunk)
-            total_chunks += 1
-            total_bytes_sent += len(chunk)
-            #logger.debug(f"Sent chunk {total_chunks}: {len(chunk)} bytes")
-            #await asyncio.sleep(0.1)  # Simulate real-time streamin
-            #logger.info(f"Finished sending audio data: {total_chunks} chunks sent, total bytes sent: {total_bytes_sent}")
-
-    except Exception as e:
-        logger.error(f"Send audio error: {e}")
-
-    finally:
-        logger.info("WAV file closed")
 
 async def receive_transcriptions(websocket):
     try:
@@ -79,6 +67,10 @@ async def receive_transcriptions(websocket):
             print(f"Transcription: {message}")
     except Exception as e:
         logger.error(f"Receive transcription error: {e}")
+
+
+
+
 
 if __name__ == "__main__":
     asyncio.run(send_receive())

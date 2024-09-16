@@ -162,23 +162,21 @@ async def process_audio_stream(websocket: WebSocket):
 
             audio_chunk = process_received_audio(data)
             #logger.debug(f"Processed audio chunk {chunk_counter}: {len(audio_chunk)} samples")
+            # Check if enough audio has been buffered
+            if len(audio_buffer) >= min_chunk_size * sampling_rate:
+                if transcription_task is None or transcription_task.done():
+                    # Start a new transcription task
+                    # logger.info(f"Starting transcription task for {len(audio_buffer)} samples")
+                    transcription_task = asyncio.create_task(
+                        transcribe_and_send(websocket, audio_chunk)
+                    )
 
-            audio_buffer = np.concatenate((audio_buffer, audio_chunk))
             #logger.debug(f"Audio buffer size: {len(audio_buffer)} samples")
         except Exception as e:
             logger.error(f"Error receiving data: {e}")
             break
 
-        # Check if enough audio has been buffered
-        if len(audio_buffer) >= min_chunk_size * sampling_rate:
-            if transcription_task is None or transcription_task.done():
-                # Start a new transcription task
-                #logger.info(f"Starting transcription task for {len(audio_buffer)} samples")
-                transcription_task = asyncio.create_task(
-                    transcribe_and_send(websocket, audio_buffer.copy())
-                )
-                audio_buffer = np.array([], dtype=np.float32)
-                #logger.debug("Audio buffer reset after starting transcription task")
+
 
 async def transcribe_and_send(websocket: WebSocket, audio_data):
     """Run transcription in a separate thread and send the result to the client."""
