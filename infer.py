@@ -211,6 +211,7 @@ async def websocket_transcribe(websocket: WebSocket):
                     chunk_counter += 1
                     with open(chunk_filename, 'wb') as audio_file:
                         audio_file.write(audio_chunk)
+
                     # Write audio chunk to file and accumulate size and time
                     temp_audio_file.write(audio_chunk)
                     temp_audio_file.flush()
@@ -238,7 +239,7 @@ async def websocket_transcribe(websocket: WebSocket):
                     response = {
                         "new_segments": partial_result['new_segments'],
                         "processed_segments": processed_segments,
-                        "download_url": f"https://gigaverse-ivrit-ai-streaming.hf.space/download_audio/{os.path.basename(chunk_filename)})"
+                        "download_url": f"https://gigaverse-ivrit-ai-streaming.hf.space/download_audio/{os.path.basename(chunk_filename)}"
                     }
                     logging.info(f"Sending {len(partial_result['new_segments'])} new segments to the client.")
                     await websocket.send_json(response)
