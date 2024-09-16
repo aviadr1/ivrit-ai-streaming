@@ -19,7 +19,7 @@ async def send_audio(websocket):
             for chunk in response.iter_content(chunk_size=1024):  # Stream in chunks
                 if chunk:
                     audio_buffer.extend(chunk)
-                    print(f"Received audio chunk of size {len(chunk)} bytes.")
+                    #print(f"Received audio chunk of size {len(chunk)} bytes.")
 
                     # Send buffered audio data once it's large enough
                     if len(audio_buffer) >= buffer_size:

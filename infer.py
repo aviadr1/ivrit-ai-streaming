@@ -195,6 +195,7 @@ async def websocket_transcribe(websocket: WebSocket):
             #temp_audio_filename = os.path.basename(temp_audio_file.name)
             output_directory = "/tmp"
             os.makedirs(output_directory, exist_ok=True)
+            chunk_counter = 0
 
             while True:
                 try:
@@ -204,7 +205,7 @@ async def websocket_transcribe(websocket: WebSocket):
                         logging.warning("Received empty audio chunk, skipping processing hey.")
                         continue
 
-                    chunk_counter = 0
+
                     # Create a new file for the chunk
                     chunk_filename = os.path.join(output_directory, f"audio_chunk_{chunk_counter}.wav")
                     chunk_counter += 1
