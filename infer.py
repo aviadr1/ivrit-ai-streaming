@@ -1,5 +1,6 @@
 import base64
 import os
+import wave
 
 import faster_whisper
 import tempfile
@@ -209,8 +210,15 @@ async def websocket_transcribe(websocket: WebSocket):
                     # Create a new file for the chunk
                     chunk_filename = os.path.join(output_directory, f"audio_chunk_{chunk_counter}.wav")
                     chunk_counter += 1
-                    with open(chunk_filename, 'wb') as audio_file:
-                        audio_file.write(audio_chunk)
+
+                    with wave.open(chunk_filename, 'wb') as wav_file:
+                        wav_file.setnchannels(1)  # Mono channel
+                        wav_file.setsampwidth(2)  # 2 bytes per sample (16-bit audio)
+                        wav_file.setframerate(16000)  # 16 kHz sample rate
+                        wav_file.writeframes(audio_chunk)
+
+                    # with open(chunk_filename, 'wb') as audio_file:
+                    #     audio_file.write(audio_chunk)
 
                     # Write audio chunk to file and accumulate size and time
                     temp_audio_file.write(audio_chunk)
