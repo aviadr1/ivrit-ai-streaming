@@ -200,7 +200,7 @@ def sync_transcribe_audio(audio_data):
 
         logger.info('Starting transcription...')
         segments, info = model.transcribe(
-            audio_data, language="he", word_timestamps=True
+            audio_data, language="he",compression_ratio_threshold=2.5, word_timestamps=True
         )
         logger.info('Transcription completed')
 
