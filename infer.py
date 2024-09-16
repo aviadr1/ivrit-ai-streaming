@@ -1,4 +1,6 @@
 import base64
+import os
+
 import faster_whisper
 import tempfile
 
@@ -188,8 +190,9 @@ async def websocket_transcribe(websocket: WebSocket):
         #min_transcription_time = 5.0  # Minimum duration of audio in seconds before transcription starts
 
         # A temporary file to store the growing audio data
-        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_audio_file:
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False,dir= "/tmp") as temp_audio_file:
             logging.info(f"Temporary audio file created at {temp_audio_file.name}")
+            temp_audio_filename = os.path.basename(temp_audio_file.name)
 
             while True:
                 try:
@@ -225,7 +228,8 @@ async def websocket_transcribe(websocket: WebSocket):
                     # Send the transcription result back to the client with both new and all processed segments
                     response = {
                         "new_segments": partial_result['new_segments'],
-                        "processed_segments": processed_segments
+                        "processed_segments": processed_segments,
+                        "download_url": f"wss://gigaverse-ivrit-ai-streaming.hf.space/download_audio/{temp_audio_filename}"
                     }
                     logging.info(f"Sending {len(partial_result['new_segments'])} new segments to the client.")
                     await websocket.send_json(response)
@@ -242,8 +246,18 @@ async def websocket_transcribe(websocket: WebSocket):
         logging.info("Cleaning up and closing WebSocket connection.")
 
 
+from fastapi.responses import FileResponse
 
 
+@app.get("/download_audio/{filename}")
+async def download_audio(filename: str):
+    file_path = f"/tmp/{filename}"
+
+    # Ensure the file exists before serving it
+    if os.path.exists(file_path):
+        return FileResponse(file_path, media_type='audio/wav', filename=filename)
+    else:
+        return {"error": "File not found"}
 
 # @app.websocket("/ws")
 # async def websocket_endpoint(websocket: WebSocket):
