@@ -142,7 +142,6 @@ async def process_audio_stream(websocket: WebSocket):
     """Continuously receive audio chunks and initiate transcription tasks."""
     sampling_rate = 16000
     min_chunk_size = 5  # in seconds
-    audio_buffer = np.array([], dtype=np.float32)
 
     transcription_task = None
     chunk_counter = 0
@@ -163,13 +162,12 @@ async def process_audio_stream(websocket: WebSocket):
             audio_chunk = process_received_audio(data)
             #logger.debug(f"Processed audio chunk {chunk_counter}: {len(audio_chunk)} samples")
             # Check if enough audio has been buffered
-            if len(audio_buffer) >= min_chunk_size * sampling_rate:
-                if transcription_task is None or transcription_task.done():
-                    # Start a new transcription task
-                    # logger.info(f"Starting transcription task for {len(audio_buffer)} samples")
-                    transcription_task = asyncio.create_task(
-                        transcribe_and_send(websocket, audio_chunk)
-                    )
+            if transcription_task is None or transcription_task.done():
+                # Start a new transcription task
+                # logger.info(f"Starting transcription task for {len(audio_buffer)} samples")
+                transcription_task = asyncio.create_task(
+                    transcribe_and_send(websocket, audio_chunk)
+                )
 
             #logger.debug(f"Audio buffer size: {len(audio_buffer)} samples")
         except Exception as e:
