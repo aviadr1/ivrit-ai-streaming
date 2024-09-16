@@ -61,10 +61,9 @@ async def send_audio(websocket):
             await websocket.send(chunk)
             total_chunks += 1
             total_bytes_sent += len(chunk)
-            logger.debug(f"Sent chunk {total_chunks}: {len(chunk)} bytes")
+            #logger.debug(f"Sent chunk {total_chunks}: {len(chunk)} bytes")
             await asyncio.sleep(0.1)  # Simulate real-time streamin
-            logger.info(
-                f"Finished sending audio data: {total_chunks} chunks sent, total bytes sent: {total_bytes_sent}")
+            #logger.info(f"Finished sending audio data: {total_chunks} chunks sent, total bytes sent: {total_bytes_sent}")
 
     except Exception as e:
         logger.error(f"Send audio error: {e}")

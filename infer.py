@@ -158,13 +158,13 @@ async def process_audio_stream(websocket: WebSocket):
             chunk_counter += 1
             chunk_size = len(data)
             total_bytes_received += chunk_size
-            logger.debug(f"Received chunk {chunk_counter}: {chunk_size} bytes")
+            #logger.debug(f"Received chunk {chunk_counter}: {chunk_size} bytes")
 
             audio_chunk = process_received_audio(data)
-            logger.debug(f"Processed audio chunk {chunk_counter}: {len(audio_chunk)} samples")
+            #logger.debug(f"Processed audio chunk {chunk_counter}: {len(audio_chunk)} samples")
 
             audio_buffer = np.concatenate((audio_buffer, audio_chunk))
-            logger.debug(f"Audio buffer size: {len(audio_buffer)} samples")
+            #logger.debug(f"Audio buffer size: {len(audio_buffer)} samples")
         except Exception as e:
             logger.error(f"Error receiving data: {e}")
             break
@@ -173,12 +173,12 @@ async def process_audio_stream(websocket: WebSocket):
         if len(audio_buffer) >= min_chunk_size * sampling_rate:
             if transcription_task is None or transcription_task.done():
                 # Start a new transcription task
-                logger.info(f"Starting transcription task for {len(audio_buffer)} samples")
+                #logger.info(f"Starting transcription task for {len(audio_buffer)} samples")
                 transcription_task = asyncio.create_task(
                     transcribe_and_send(websocket, audio_buffer.copy())
                 )
                 audio_buffer = np.array([], dtype=np.float32)
-                logger.debug("Audio buffer reset after starting transcription task")
+                #logger.debug("Audio buffer reset after starting transcription task")
 
 async def transcribe_and_send(websocket: WebSocket, audio_data):
     """Run transcription in a separate thread and send the result to the client."""
@@ -188,7 +188,7 @@ async def transcribe_and_send(websocket: WebSocket, audio_data):
         try:
             # Send the result as JSON
             await websocket.send_json(transcription_result)
-            logger.info("Transcription JSON sent to client")
+            logger.info(f"Transcription JSON sent to client {transcription_result}")
         except Exception as e:
             logger.error(f"Error sending transcription: {e}")
     else:
@@ -200,7 +200,7 @@ def sync_transcribe_audio(audio_data):
 
         logger.info('Starting transcription...')
         segments, info = model.transcribe(
-            audio_data, language="he", beam_size=5, word_timestamps=True
+            audio_data, language="he", word_timestamps=True
         )
         logger.info('Transcription completed')
 
@@ -240,12 +240,12 @@ def sync_transcribe_audio(audio_data):
 
 def process_received_audio(data):
     """Convert received bytes into normalized float32 NumPy array."""
-    logger.debug(f"Processing received audio data of size {len(data)} bytes")
+    #logger.debug(f"Processing received audio data of size {len(data)} bytes")
     audio_int16 = np.frombuffer(data, dtype=np.int16)
-    logger.debug(f"Converted to int16 NumPy array with {len(audio_int16)} samples")
+    #logger.debug(f"Converted to int16 NumPy array with {len(audio_int16)} samples")
 
     audio_float32 = audio_int16.astype(np.float32) / 32768.0  # Normalize to [-1, 1]
-    logger.debug(f"Normalized audio data to float32 with {len(audio_float32)} samples")
+    #logger.debug(f"Normalized audio data to float32 with {len(audio_float32)} samples")
 
     return audio_float32
 
