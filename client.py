@@ -1,4 +1,6 @@
 import asyncio
+import json
+
 import websockets
 import requests
 import ssl
@@ -22,7 +24,7 @@ async def send_audio(websocket):
                     # Send buffered audio data once it's large enough
                     if len(audio_buffer) >= buffer_size:
                         await websocket.send(audio_buffer)
-                        print(f"Sent {len(audio_buffer)} bytes of audio data.")
+                        #print(f"Sent {len(audio_buffer)} bytes of audio data.")
                         audio_buffer.clear()
                         await asyncio.sleep(0.01)
 
@@ -35,6 +37,7 @@ async def receive_transcription(websocket):
         try:
             transcription = await websocket.recv()  # Receive transcription from the server
             print(f"Transcription: {transcription}")
+            transcription = json.loads(transcription)
             download_url = transcription.get('download_url')
             if download_url:
                 print(f"Download URL: {download_url}")

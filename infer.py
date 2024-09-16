@@ -229,7 +229,7 @@ async def websocket_transcribe(websocket: WebSocket):
                     response = {
                         "new_segments": partial_result['new_segments'],
                         "processed_segments": processed_segments,
-                        "download_url": f"wss://gigaverse-ivrit-ai-streaming.hf.space/download_audio/{temp_audio_filename}"
+                        "download_url": f"https://gigaverse-ivrit-ai-streaming.hf.space/download_audio/{temp_audio_filename}"
                     }
                     logging.info(f"Sending {len(partial_result['new_segments'])} new segments to the client.")
                     await websocket.send_json(response)
