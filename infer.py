@@ -190,7 +190,7 @@ async def websocket_transcribe(websocket: WebSocket):
         #min_transcription_time = 5.0  # Minimum duration of audio in seconds before transcription starts
 
         # A temporary file to store the growing audio data
-        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False,dir= "/tmp") as temp_audio_file:
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_audio_file:
             logging.info(f"Temporary audio file created at {temp_audio_file.name}")
             temp_audio_filename = os.path.basename(temp_audio_file.name)
 
@@ -199,7 +199,7 @@ async def websocket_transcribe(websocket: WebSocket):
                     # Receive the next chunk of audio data
                     audio_chunk = await websocket.receive_bytes()
                     if not audio_chunk:
-                        logging.warning("Received empty audio chunk, skipping processing.")
+                        logging.warning("Received empty audio chunk, skipping processing hey.")
                         continue
 
                     # Write audio chunk to file and accumulate size and time
