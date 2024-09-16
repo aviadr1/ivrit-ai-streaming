@@ -160,10 +160,10 @@ async def process_audio_stream(websocket: WebSocket):
             total_bytes_received += chunk_size
             #logger.debug(f"Received chunk {chunk_counter}: {chunk_size} bytes")
 
-            audio_chunk = process_received_audio(data)
+            #audio_chunk = process_received_audio(data)
             #logger.debug(f"Processed audio chunk {chunk_counter}: {len(audio_chunk)} samples")
 
-            audio_buffer = np.concatenate((audio_buffer, audio_chunk))
+            audio_buffer = np.concatenate((audio_buffer, data))
             #logger.debug(f"Audio buffer size: {len(audio_buffer)} samples")
         except Exception as e:
             logger.error(f"Error receiving data: {e}")
@@ -238,16 +238,16 @@ def sync_transcribe_audio(audio_data):
         logger.error(f"Transcription error: {e}")
         return {}
 
-def process_received_audio(data):
-    """Convert received bytes into normalized float32 NumPy array."""
-    #logger.debug(f"Processing received audio data of size {len(data)} bytes")
-    audio_int16 = np.frombuffer(data, dtype=np.int16)
-    #logger.debug(f"Converted to int16 NumPy array with {len(audio_int16)} samples")
-
-    audio_float32 = audio_int16.astype(np.float32) / 32768.0  # Normalize to [-1, 1]
-    #logger.debug(f"Normalized audio data to float32 with {len(audio_float32)} samples")
-
-    return audio_float32
+# def process_received_audio(data):
+#     """Convert received bytes into normalized float32 NumPy array."""
+#     #logger.debug(f"Processing received audio data of size {len(data)} bytes")
+#     audio_int16 = np.frombuffer(data, dtype=np.int16)
+#     #logger.debug(f"Converted to int16 NumPy array with {len(audio_int16)} samples")
+#
+#     audio_float32 = audio_int16.astype(np.float32) / 32768.0  # Normalize to [-1, 1]
+#     #logger.debug(f"Normalized audio data to float32 with {len(audio_float32)} samples")
+#
+#     return audio_float32
 
 
 
