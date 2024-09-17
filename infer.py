@@ -197,6 +197,12 @@ async def websocket_transcribe(websocket: WebSocket):
         channels = 1  # Mono
         sample_width = 2  # 2 bytes per sample (16-bit audio)
 
+        # Ensure the /tmp directory exists
+        tmp_directory = "/tmp"
+        if not os.path.exists(tmp_directory):
+            logging.info(f"Creating /tmp directory: {tmp_directory}")
+            os.makedirs(tmp_directory)
+
         while True:
             try:
                 # Receive the next chunk of PCM audio data
@@ -217,19 +223,27 @@ async def websocket_transcribe(websocket: WebSocket):
                 if accumulated_audio_time >= min_transcription_time:
                     logging.info("Buffered enough audio time, starting transcription.")
 
-                    # Create a temporary WAV file from the accumulated PCM data
-                    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_wav_file:
-                        with wave.open(temp_wav_file.name, 'wb') as wav_file:
-                            wav_file.setnchannels(channels)
-                            wav_file.setsampwidth(sample_width)
-                            wav_file.setframerate(sample_rate)
-                            wav_file.writeframes(pcm_audio_buffer)
+                    # Create a temporary WAV file in /tmp for transcription
+                    temp_wav_path = os.path.join(tmp_directory, f"temp_audio_{last_transcribed_time}.wav")
+                    with wave.open(temp_wav_path, 'wb') as wav_file:
+                        wav_file.setnchannels(channels)
+                        wav_file.setsampwidth(sample_width)
+                        wav_file.setframerate(sample_rate)
+                        wav_file.writeframes(pcm_audio_buffer)
 
-                        logging.info(f"Temporary WAV file created at {temp_wav_file.name} for transcription.")
+                    logging.info(f"Temporary WAV file created at {temp_wav_path} for transcription.")
 
-                        # Call the transcription function with the WAV file
-                        partial_result, last_transcribed_time = transcribe_core_ws(temp_wav_file.name, last_transcribed_time)
-                        processed_segments.extend(partial_result['new_segments'])
+                    # Log to confirm that the file exists and has the expected size
+                    if os.path.exists(temp_wav_path):
+                        file_size = os.path.getsize(temp_wav_path)
+                        logging.info(f"Temporary WAV file size: {file_size} bytes.")
+                    else:
+                        logging.error(f"Temporary WAV file {temp_wav_path} does not exist.")
+                        raise Exception(f"Temporary WAV file {temp_wav_path} not found.")
+
+                    # Call the transcription function with the WAV file path
+                    partial_result, last_transcribed_time = transcribe_core_ws(temp_wav_path, last_transcribed_time)
+                    processed_segments.extend(partial_result['new_segments'])
 
                     # Clear the buffer after transcription
                     pcm_audio_buffer.clear()
@@ -243,6 +257,11 @@ async def websocket_transcribe(websocket: WebSocket):
                     logging.info(f"Sending {len(partial_result['new_segments'])} new segments to the client.")
                     await websocket.send_json(response)
 
+                    # Optionally delete the temporary WAV file after processing
+                    if os.path.exists(temp_wav_path):
+                        os.remove(temp_wav_path)
+                        logging.info(f"Temporary WAV file {temp_wav_path} removed.")
+
             except WebSocketDisconnect:
                 logging.info("WebSocket connection closed by the client.")
                 break
@@ -253,7 +272,6 @@ async def websocket_transcribe(websocket: WebSocket):
 
     finally:
         logging.info("Cleaning up and closing WebSocket connection.")
-
 
 from fastapi.responses import FileResponse
 

@@ -39,7 +39,7 @@ async def send_audio(websocket):
                         break  # End of file
 
                     await websocket.send(pcm_chunk)  # Send raw PCM data chunk
-                    print(f"Sent PCM chunk of size {len(pcm_chunk)} bytes.")
+                    #print(f"Sent PCM chunk of size {len(pcm_chunk)} bytes.")
                     await asyncio.sleep(0.01)  # Simulate real-time sending
 
         else:
