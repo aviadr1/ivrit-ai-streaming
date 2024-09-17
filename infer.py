@@ -126,14 +126,14 @@ async def read_root():
 import tempfile
 
 
-def transcribe_core_ws(audio_file):
+async def transcribe_core_ws(audio_file):
 
     ret = {'segments': []}
 
     try:
         # Transcribe the entire audio file
         logging.debug(f"Initiating model transcription for file: {audio_file}")
-        segs, _ = model.transcribe(audio_file, language='he', word_timestamps=True)
+        segs, _ = await asyncio.to_thread(model.transcribe,audio_file, language='he', word_timestamps=True)
         logging.info('Transcription completed successfully.')
     except Exception as e:
         logging.error(f"Error during transcription: {e}")
@@ -231,7 +231,6 @@ async def websocket_transcribe(websocket: WebSocket):
                 # Receive the next chunk of PCM audio data
                 logging.info("in try before recive ")
                 audio_chunk = await asyncio.wait_for(websocket.receive_bytes(), timeout=10.0)
-                logging.info(f"type of audio chunk : {type(audio_chunk)}")
 
                 logging.info("after recieve")
                 sys.stdout.flush()
@@ -241,7 +240,6 @@ async def websocket_transcribe(websocket: WebSocket):
 
                 # Accumulate the raw PCM data into the buffer
                 pcm_audio_buffer.extend(audio_chunk)
-                print(f"type of pcm buffer: {type(pcm_audio_buffer)}")
                 print(f"len of pcm buffer: {len(pcm_audio_buffer)}")
                 logging.info("after buffer extend")
 
@@ -274,7 +272,7 @@ async def websocket_transcribe(websocket: WebSocket):
                             temp_wav_file.flush()
 
                         if not validate_wav_file(temp_wav_file.name):
-                            logging.error(f"Invalid WAV file created: {temp_wav_file.name}, type of file {type(temp_wav_file.name)}")
+                            logging.error(f"Invalid WAV file created: {temp_wav_file.name}")
                             await websocket.send_json({"error": "Invalid WAV file created."})
                             return
 
@@ -290,7 +288,7 @@ async def websocket_transcribe(websocket: WebSocket):
 
                     with open(temp_wav_file.name, 'rb') as audio_file:
                         audio_data = audio_file.read()
-                    partial_result = transcribe_core_ws(audio_data)
+                    partial_result = await asyncio.to_thread(transcribe_core_ws,audio_data)
                     segments.extend(partial_result['segments'])
 
                     # Clear the buffer after transcription
