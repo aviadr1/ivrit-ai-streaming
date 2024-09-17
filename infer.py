@@ -131,9 +131,6 @@ def transcribe_core_ws(audio_file, last_transcribed_time):
     """
     Transcribe the audio file and return only the segments that have not been processed yet.
 
-    :param audio_file: Path to the growing audio file.
-    :param last_transcribed_time: The last time (in seconds) that was transcribed.
-    :return: Newly transcribed segments and the updated last transcribed time.
     """
     logging.info(f"Starting transcription for file: {audio_file} from {last_transcribed_time} seconds.")
 
@@ -177,6 +174,43 @@ def transcribe_core_ws(audio_file, last_transcribed_time):
 import tempfile
 
 
+# Function to verify if the PCM data is valid
+def validate_pcm_data(pcm_audio_buffer, sample_rate, channels, sample_width):
+    """Validates the PCM data buffer to ensure it conforms to the expected format."""
+    logging.info(f"Validating PCM data: total size = {len(pcm_audio_buffer)} bytes.")
+
+    # Calculate the expected sample size
+    expected_sample_size = sample_rate * channels * sample_width
+    actual_sample_size = len(pcm_audio_buffer)
+
+    if actual_sample_size == 0:
+        logging.error("Received PCM data is empty.")
+        return False
+
+    logging.info(f"Expected sample size per second: {expected_sample_size} bytes.")
+
+    if actual_sample_size % expected_sample_size != 0:
+        logging.warning(
+            f"PCM data size {actual_sample_size} is not a multiple of the expected sample size per second ({expected_sample_size} bytes). Data may be corrupted or incomplete.")
+
+    return True
+
+
+# Function to validate if the created WAV file is valid
+def validate_wav_file(wav_file_path):
+    """Validates if the WAV file was created correctly and can be opened."""
+    try:
+        with wave.open(wav_file_path, 'rb') as wav_file:
+            sample_rate = wav_file.getframerate()
+            channels = wav_file.getnchannels()
+            sample_width = wav_file.getsampwidth()
+            logging.info(
+                f"WAV file details - Sample Rate: {sample_rate}, Channels: {channels}, Sample Width: {sample_width}")
+            return True
+    except wave.Error as e:
+        logging.error(f"Error reading WAV file: {e}")
+        return False
+
 @app.websocket("/wtranscribe")
 async def websocket_transcribe(websocket: WebSocket):
     logging.info("New WebSocket connection request received.")
@@ -214,6 +248,12 @@ async def websocket_transcribe(websocket: WebSocket):
                 # Accumulate the raw PCM data into the buffer
                 pcm_audio_buffer.extend(audio_chunk)
 
+                # Validate the PCM data after each chunk
+                if not validate_pcm_data(pcm_audio_buffer, sample_rate, channels, sample_width):
+                    logging.error("Invalid PCM data received. Aborting transcription.")
+                    await websocket.send_json({"error": "Invalid PCM data received."})
+                    return
+
                 # Estimate the duration of the chunk based on its size
                 chunk_duration = len(audio_chunk) / (sample_rate * channels * sample_width)
                 accumulated_audio_time += chunk_duration
@@ -232,6 +272,11 @@ async def websocket_transcribe(websocket: WebSocket):
                                 wav_file.setsampwidth(sample_width)
                                 wav_file.setframerate(sample_rate)
                                 wav_file.writeframes(pcm_audio_buffer)
+
+                        if not validate_wav_file(temp_wav_file.name):
+                            logging.error(f"Invalid WAV file created: {temp_wav_file.name}")
+                            await websocket.send_json({"error": "Invalid WAV file created."})
+                            return
 
                     logging.info(f"Temporary WAV file created at {temp_wav_file.name} for transcription.")
 
@@ -260,9 +305,9 @@ async def websocket_transcribe(websocket: WebSocket):
                     await websocket.send_json(response)
 
                     # Optionally delete the temporary WAV file after processing
-                    if os.path.exists(temp_wav_file):
-                        os.remove(temp_wav_file)
-                        logging.info(f"Temporary WAV file {temp_wav_file} removed.")
+                    if os.path.exists(temp_wav_file.name):
+                        os.remove(temp_wav_file.name)
+                        logging.info(f"Temporary WAV file {temp_wav_file.name} removed.")
 
             except WebSocketDisconnect:
                 logging.info("WebSocket connection closed by the client.")
