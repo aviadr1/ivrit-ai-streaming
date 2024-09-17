@@ -224,25 +224,27 @@ async def websocket_transcribe(websocket: WebSocket):
                     logging.info("Buffered enough audio time, starting transcription.")
 
                     # Create a temporary WAV file in /tmp for transcription
-                    temp_wav_path = os.path.join(tmp_directory, f"temp_audio_{last_transcribed_time}.wav")
-                    with wave.open(temp_wav_path, 'wb') as wav_file:
-                        wav_file.setnchannels(channels)
-                        wav_file.setsampwidth(sample_width)
-                        wav_file.setframerate(sample_rate)
-                        wav_file.writeframes(pcm_audio_buffer)
+                    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False, dir="/tmp") as temp_wav_file:
+                        logging.info(f"Temporary audio file created at {temp_wav_file.name}")
 
-                    logging.info(f"Temporary WAV file created at {temp_wav_path} for transcription.")
+                        with wave.open(temp_wav_file.name, 'wb') as wav_file:
+                                wav_file.setnchannels(channels)
+                                wav_file.setsampwidth(sample_width)
+                                wav_file.setframerate(sample_rate)
+                                wav_file.writeframes(pcm_audio_buffer)
+
+                    logging.info(f"Temporary WAV file created at {temp_wav_file.name} for transcription.")
 
                     # Log to confirm that the file exists and has the expected size
-                    if os.path.exists(temp_wav_path):
-                        file_size = os.path.getsize(temp_wav_path)
+                    if os.path.exists(temp_wav_file.name):
+                        file_size = os.path.getsize(temp_wav_file.name)
                         logging.info(f"Temporary WAV file size: {file_size} bytes.")
                     else:
-                        logging.error(f"Temporary WAV file {temp_wav_path} does not exist.")
-                        raise Exception(f"Temporary WAV file {temp_wav_path} not found.")
+                        logging.error(f"Temporary WAV file {temp_wav_file.name} does not exist.")
+                        raise Exception(f"Temporary WAV file {temp_wav_file.name} not found.")
 
                     # Call the transcription function with the WAV file path
-                    partial_result, last_transcribed_time = transcribe_core_ws(temp_wav_path, last_transcribed_time)
+                    partial_result, last_transcribed_time = transcribe_core_ws(temp_wav_file.name, last_transcribed_time)
                     processed_segments.extend(partial_result['new_segments'])
 
                     # Clear the buffer after transcription

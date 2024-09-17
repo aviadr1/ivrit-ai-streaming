@@ -52,17 +52,17 @@ async def receive_transcription(websocket):
             transcription = await websocket.recv()  # Receive transcription from the server
             print(f"Transcription: {transcription}")
             transcription = json.loads(transcription)
-            download_url = transcription.get('download_url')
-            if download_url:
-                print(f"Download URL: {download_url}")
-                # Download the audio file
-                response = requests.get(download_url)
-                if response.status_code == 200:
-                    with open("downloaded_audio.wav", "wb") as f:
-                        f.write(response.content)
-                    print("File downloaded successfully")
-                else:
-                    print(f"Failed to download file. Status code: {response.status_code}")
+            #download_url = transcription.get('download_url')
+            # if download_url:
+            #     print(f"Download URL: {download_url}")
+            #     # Download the audio file
+            #     response = requests.get(download_url)
+            #     if response.status_code == 200:
+            #         with open("downloaded_audio.wav", "wb") as f:
+            #             f.write(response.content)
+            #         print("File downloaded successfully")
+            #     else:
+            #         print(f"Failed to download file. Status code: {response.status_code}")
         except Exception as e:
             print(f"Error receiving transcription: {e}")
             break
