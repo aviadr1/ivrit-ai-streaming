@@ -230,7 +230,12 @@ async def websocket_transcribe(websocket: WebSocket):
             try:
                 # Receive the next chunk of PCM audio data
                 logging.info("in try before recive ")
-                audio_chunk = await asyncio.wait_for(websocket.receive_bytes(), timeout=10.0)
+                audio_chunk = await websocket.receive_bytes()
+                if isinstance(audio_chunk, bytes):
+                    print("is instance ")
+                else:
+                    print("is instance NOT")
+
 
                 logging.info("after recieve")
                 sys.stdout.flush()
