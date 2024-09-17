@@ -230,7 +230,7 @@ async def websocket_transcribe(websocket: WebSocket):
             try:
                 # Receive the next chunk of PCM audio data
                 logging.info("in try before recive ")
-                audio_chunk = await asyncio.wait_for(websocket.receive_bytes(),timeout=10.0)
+                audio_chunk = await asyncio.wait_for(websocket.receive_bytes(), timeout=10.0)
                 logging.info(f"type of audio chunk : {type(audio_chunk)}")
 
                 logging.info("after recieve")
@@ -287,7 +287,10 @@ async def websocket_transcribe(websocket: WebSocket):
                     else:
                         logging.error(f"Temporary WAV file {temp_wav_file.name} does not exist.")
                         raise Exception(f"Temporary WAV file {temp_wav_file.name} not found.")
-                    partial_result = transcribe_core_ws(temp_wav_file)
+
+                    with open(temp_wav_file.name, 'rb') as audio_file:
+                        audio_data = audio_file.read()
+                    partial_result = transcribe_core_ws(audio_data)
                     segments.extend(partial_result['segments'])
 
                     # Clear the buffer after transcription
