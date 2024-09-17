@@ -52,3 +52,10 @@ def dict_to_segment(data: dict) -> Segment:
         no_speech_prob=data["no_speech_prob"],
         words=[dict_to_word(word) for word in data["words"]] if data["words"] else None
     )
+
+def get_raw_words_from_segments(segments: list[Segment]) -> str:
+    return " ".join(
+        word.word
+        for segment in segments if segment.words
+        for word in segment.words
+    )

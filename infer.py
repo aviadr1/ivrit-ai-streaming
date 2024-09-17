@@ -18,13 +18,16 @@ from typing import Optional
 import sys
 import asyncio
 
-from model import segment_to_dict
+from model import segment_to_dict, get_raw_words_from_segments
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s: %(message)s',
                     handlers=[logging.StreamHandler(sys.stdout)], force=True)
 logger = logging.getLogger(__name__)
 #logging.getLogger("asyncio").setLevel(logging.DEBUG)
+
+logging.info(torch.__version__)
+logging.info(torch.version.cuda)  # Should show the installed CUDA version
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 logging.info(f'Device selected: {device}')
 
@@ -70,7 +73,8 @@ async def websocket_transcribe(websocket: WebSocket):
                     audio_file_path = temp_audio_file.name
 
                 # Call the transcribe function
-                segments, info = await asyncio.to_thread(model.transcribe,
+                # segments, info = await asyncio.to_thread(model.transcribe,
+                segments, info = model.transcribe(
                     audio_file_path,
                     language='he',
                     initial_prompt=input_data.init_prompt,
@@ -82,7 +86,7 @@ async def websocket_transcribe(websocket: WebSocket):
                 # Convert segments to list and serialize
                 segments_list = list(segments)
                 segments_serializable = [segment_to_dict(s) for s in segments_list]
-
+                logger.info(get_raw_words_from_segments(segments_list))
                 # Send the serialized segments back to the client
                 await websocket.send_json(segments_serializable)
 

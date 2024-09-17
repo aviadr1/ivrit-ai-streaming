@@ -4,6 +4,8 @@ import sys
 import time
 import logging
 import os
+from wave import Wave_read
+
 import requests
 
 import json
@@ -11,6 +13,8 @@ import base64
 import numpy as np
 import soundfile as sf
 import io
+
+import librosa
 
 # Import the necessary components from whisper_online.py
 from libs.whisper_streaming.whisper_online import (
@@ -24,9 +28,43 @@ from libs.whisper_streaming.whisper_online import (
     load_audio,
     load_audio_chunk, OpenaiApiASR,
 )
-from model import dict_to_segment
+from model import dict_to_segment, get_raw_words_from_segments
 
+logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s: %(message)s',
+                    handlers=[logging.StreamHandler(sys.stdout)], force=True)
 logger = logging.getLogger(__name__)
+
+
+
+def convert_to_mono_16k(input_wav: str, output_wav: str) -> None:
+    """
+    Converts any .wav file to mono 16 kHz.
+
+    Args:
+        input_wav (str): Path to the input .wav file.
+        output_wav (str): Path to save the output .wav file with mono 16 kHz.
+    """
+    # Step 1: Load the audio file with librosa
+    audio_data, original_sr = librosa.load(input_wav, sr=None, mono=False)  # Load at original sampling rate
+    logger.info("Loaded audio with shape: %s, original sampling rate: %d" % (audio_data.shape, original_sr))
+
+    # Step 2: If the audio has multiple channels, average them to make it mono
+    if audio_data.ndim > 1:
+        audio_data = librosa.to_mono(audio_data)
+
+    # Step 3: Resample the audio to 16 kHz
+    target_sr = 16000
+    resampled_audio = librosa.resample(audio_data, orig_sr=original_sr, target_sr=target_sr)
+
+    # Step 4: Save the resampled audio as a .wav file in mono at 16 kHz
+    sf.write(output_wav, resampled_audio, target_sr)
+
+    logger.info(f"Converted audio saved to {output_wav}")
+
+
+# Example usage:
+# convert_to_mono_16k('input_audio.wav', 'output_audio_16k_mono.wav')
+
 
 # Define the RemoteFasterWhisperASR class
 class RemoteFasterWhisperASR(ASRBase):
@@ -65,6 +103,7 @@ class RemoteFasterWhisperASR(ASRBase):
         response = self.ws.recv()
         segments = json.loads(response)
         segments = [dict_to_segment(s) for s in segments]
+        logger.info(get_raw_words_from_segments(segments))
         return segments
 
     def ts_words(self, segments):
@@ -154,19 +193,24 @@ def main():
     import numpy as np
     import io
     import soundfile as sf
+    import wave
 
     # Download the audio file if not already present
     AUDIO_FILE_URL = "https://raw.githubusercontent.com/AshDavid12/runpod-serverless-forked/main/test_hebrew.wav"
     audio_file_path = "test_hebrew.wav"
+    mono16k_audio_file_path = "mono16k." + audio_file_path
     if not os.path.exists(audio_file_path):
         response = requests.get(AUDIO_FILE_URL)
         with open(audio_file_path, 'wb') as f:
             f.write(response.content)
 
+    if not os.path.exists(mono16k_audio_file_path):
+        convert_to_mono_16k(audio_file_path, mono16k_audio_file_path)
+
     # Set up arguments
     class Args:
         def __init__(self):
-            self.audio_path = audio_file_path
+            self.audio_path = mono16k_audio_file_path
             self.lan = 'he'
             self.model = None  # Not used in RemoteFasterWhisperASR
             self.model_cache_dir = None
