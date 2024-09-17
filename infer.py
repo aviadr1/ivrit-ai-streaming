@@ -270,6 +270,7 @@ async def websocket_transcribe(websocket: WebSocket):
                     logging.info("Buffered enough audio time, starting transcription.")
 
                     # Create a temporary WAV file in /tmp for transcription
+
                     with tempfile.NamedTemporaryFile(suffix=".wav", delete=False, dir="/tmp") as temp_wav_file:
                         logging.info(f"Temporary audio file created at {temp_wav_file.name}")
 
@@ -278,6 +279,7 @@ async def websocket_transcribe(websocket: WebSocket):
                             wav_file.setsampwidth(sample_width)
                             wav_file.setframerate(sample_rate)
                             wav_file.writeframes(pcm_audio_buffer)
+                            temp_wav_file.flush()
 
                         if not validate_wav_file(temp_wav_file.name):
                             logging.error(f"Invalid WAV file created: {temp_wav_file.name}")
