@@ -1,5 +1,6 @@
 import asyncio
 import json
+import wave
 
 import websockets
 import requests
@@ -9,28 +10,41 @@ import ssl
 AUDIO_FILE_URL = "https://raw.githubusercontent.com/AshDavid12/runpod-serverless-forked/main/test_hebrew.wav"  # Use WAV file
 
 async def send_audio(websocket):
-    buffer_size = 1024*512  # Buffer audio chunks up to 512KB before sending
-    audio_buffer = bytearray()
+    buffer_size = 1024 * 16  # Send smaller chunks (16KB) for real-time processing
 
-    with requests.get(AUDIO_FILE_URL, stream=True, allow_redirects=False) as response:
+    # Download the WAV file locally
+    with requests.get(AUDIO_FILE_URL, stream=True) as response:
         if response.status_code == 200:
-            print("Starting to stream audio file...")
+            with open('downloaded_audio.wav', 'wb') as f:
+                for chunk in response.iter_content(chunk_size=1024):
+                    f.write(chunk)
+            print("Audio file downloaded successfully.")
 
-            for chunk in response.iter_content(chunk_size=1024):  # Stream in chunks
-                if chunk:
-                    audio_buffer.extend(chunk)
-                    #print(f"Received audio chunk of size {len(chunk)} bytes.")
+            # Open the downloaded WAV file and extract PCM data
+            with wave.open('downloaded_audio.wav', 'rb') as wav_file:
+                metadata = {
+                    'sample_rate': wav_file.getframerate(),
+                    'channels': wav_file.getnchannels(),
+                    'sampwidth': wav_file.getsampwidth(),
+                }
 
-                    # Send buffered audio data once it's large enough
-                    if len(audio_buffer) >= buffer_size:
-                        await websocket.send(audio_buffer)
-                        #print(f"Sent {len(audio_buffer)} bytes of audio data.")
-                        audio_buffer.clear()
-                        await asyncio.sleep(0.01)
+                # Send metadata to the server before sending the audio
+                await websocket.send(json.dumps(metadata))
+                print(f"Sent metadata: {metadata}")
 
-            print("Finished sending audio.")
+                # Send the PCM audio data in chunks
+                while True:
+                    pcm_chunk = wav_file.readframes(buffer_size)
+                    if not pcm_chunk:
+                        break  # End of file
+
+                    await websocket.send(pcm_chunk)  # Send raw PCM data chunk
+                    print(f"Sent PCM chunk of size {len(pcm_chunk)} bytes.")
+                    await asyncio.sleep(0.01)  # Simulate real-time sending
+
         else:
             print(f"Failed to download audio file. Status code: {response.status_code}")
+
 
 async def receive_transcription(websocket):
     while True:

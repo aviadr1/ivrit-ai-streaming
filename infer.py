@@ -185,76 +185,67 @@ async def websocket_transcribe(websocket: WebSocket):
 
     try:
         processed_segments = []  # Keeps track of the segments already transcribed
-        accumulated_audio_size = 0  # Track how much audio data has been buffered
         accumulated_audio_time = 0  # Track the total audio duration accumulated
         last_transcribed_time = 0.0
-        #min_transcription_time = 5.0  # Minimum duration of audio in seconds before transcription starts
+        min_transcription_time = 5.0  # Minimum duration of audio in seconds before transcription starts
 
-        # A temporary file to store the growing audio data
-        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_audio_file:
-            logging.info(f"Temporary audio file created at {temp_audio_file.name}")
-            #temp_audio_filename = os.path.basename(temp_audio_file.name)
-            output_directory = "/tmp"
-            os.makedirs(output_directory, exist_ok=True)
-            chunk_counter = 0
+        # A buffer to store raw PCM audio data
+        pcm_audio_buffer = bytearray()
 
-            while True:
-                try:
-                    # Receive the next chunk of audio data
-                    audio_chunk = await websocket.receive_bytes()
-                    if not audio_chunk:
-                        logging.warning("Received empty audio chunk, skipping processing hey.")
-                        continue
+        # Metadata for the incoming PCM data (sample rate, channels, and sample width should be consistent)
+        sample_rate = 16000  # 16kHz
+        channels = 1  # Mono
+        sample_width = 2  # 2 bytes per sample (16-bit audio)
 
+        while True:
+            try:
+                # Receive the next chunk of PCM audio data
+                audio_chunk = await websocket.receive_bytes()
+                if not audio_chunk:
+                    logging.warning("Received empty audio chunk, skipping processing.")
+                    continue
 
-                    # Create a new file for the chunk
-                    chunk_filename = os.path.join(output_directory, f"audio_chunk_{chunk_counter}.wav")
-                    chunk_counter += 1
+                # Accumulate the raw PCM data into the buffer
+                pcm_audio_buffer.extend(audio_chunk)
 
-                    with wave.open(chunk_filename, 'wb') as wav_file:
-                        wav_file.setnchannels(1)  # Mono channel
-                        wav_file.setsampwidth(2)  # 2 bytes per sample (16-bit audio)
-                        wav_file.setframerate(16000)  # 16 kHz sample rate
-                        wav_file.writeframes(audio_chunk)
+                # Estimate the duration of the chunk based on its size
+                chunk_duration = len(audio_chunk) / (sample_rate * channels * sample_width)
+                accumulated_audio_time += chunk_duration
+                logging.info(f"Received and buffered {len(audio_chunk)} bytes, total buffered: {len(pcm_audio_buffer)} bytes, total time: {accumulated_audio_time:.2f} seconds")
 
-                    # with open(chunk_filename, 'wb') as audio_file:
-                    #     audio_file.write(audio_chunk)
+                # Transcribe when enough time (audio) is accumulated (e.g., at least 5 seconds of audio)
+                if accumulated_audio_time >= min_transcription_time:
+                    logging.info("Buffered enough audio time, starting transcription.")
 
-                    # Write audio chunk to file and accumulate size and time
-                    temp_audio_file.write(audio_chunk)
-                    temp_audio_file.flush()
-                    accumulated_audio_size += len(audio_chunk)
+                    # Create a temporary WAV file from the accumulated PCM data
+                    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_wav_file:
+                        with wave.open(temp_wav_file.name, 'wb') as wav_file:
+                            wav_file.setnchannels(channels)
+                            wav_file.setsampwidth(sample_width)
+                            wav_file.setframerate(sample_rate)
+                            wav_file.writeframes(pcm_audio_buffer)
 
-                    # Estimate the duration of the chunk based on its size (e.g., 16kHz audio)
-                    chunk_duration = len(audio_chunk) / (16000 * 2)  # Assuming 16kHz mono WAV (2 bytes per sample)
-                    accumulated_audio_time += chunk_duration
-                    logging.info(f"Received and buffered {len(audio_chunk)} bytes, total buffered: {accumulated_audio_size} bytes, total time: {accumulated_audio_time:.2f} seconds")
+                        logging.info(f"Temporary WAV file created at {temp_wav_file.name} for transcription.")
 
-                    # Transcribe when enough time (audio) is accumulated (e.g., at least 5 seconds of audio)
-                    #if accumulated_audio_time >= min_transcription_time:
-                    #logging.info("Buffered enough audio time, starting transcription.")
+                        # Call the transcription function with the WAV file
+                        partial_result, last_transcribed_time = transcribe_core_ws(temp_wav_file.name, last_transcribed_time)
+                        processed_segments.extend(partial_result['new_segments'])
 
-
-                    # Call the transcription function with the last processed time
-                    partial_result, last_transcribed_time = transcribe_core_ws(temp_audio_file.name, last_transcribed_time)
-                    accumulated_audio_time = 0  # Reset the accumulated audio time
-                    processed_segments.extend(partial_result['new_segments'])
-
-                    # Reset the accumulated audio size after transcription
-                    accumulated_audio_size = 0
+                    # Clear the buffer after transcription
+                    pcm_audio_buffer.clear()
+                    accumulated_audio_time = 0  # Reset accumulated time
 
                     # Send the transcription result back to the client with both new and all processed segments
                     response = {
                         "new_segments": partial_result['new_segments'],
-                        "processed_segments": processed_segments,
-                        "download_url": f"https://gigaverse-ivrit-ai-streaming.hf.space/download_audio/{os.path.basename(chunk_filename)}"
+                        "processed_segments": processed_segments
                     }
                     logging.info(f"Sending {len(partial_result['new_segments'])} new segments to the client.")
                     await websocket.send_json(response)
 
-                except WebSocketDisconnect:
-                    logging.info("WebSocket connection closed by the client.")
-                    break
+            except WebSocketDisconnect:
+                logging.info("WebSocket connection closed by the client.")
+                break
 
     except Exception as e:
         logging.error(f"Unexpected error during WebSocket transcription: {e}")
