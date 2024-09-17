@@ -126,15 +126,9 @@ async def read_root():
 import tempfile
 
 
-def transcribe_core_ws(audio_file, last_transcribed_time):
-    """
-    Transcribe the audio file and return only the segments that have not been processed yet.
-
-    """
-    logging.info(f"Starting transcription for file: {audio_file} from {last_transcribed_time} seconds.")
+def transcribe_core_ws(audio_file):
 
     ret = {'segments': []}
-    new_last_transcribed_time = last_transcribed_time
 
     try:
         # Transcribe the entire audio file
@@ -236,7 +230,7 @@ async def websocket_transcribe(websocket: WebSocket):
             try:
                 # Receive the next chunk of PCM audio data
                 logging.info("in try before recive ")
-                audio_chunk = await websocket.receive_bytes()
+                audio_chunk = await asyncio.wait_for(websocket.receive_bytes(),timeout=10.0)
                 logging.info(f"type of audio chunk : {type(audio_chunk)}")
 
                 logging.info("after recieve")
@@ -293,10 +287,7 @@ async def websocket_transcribe(websocket: WebSocket):
                     else:
                         logging.error(f"Temporary WAV file {temp_wav_file.name} does not exist.")
                         raise Exception(f"Temporary WAV file {temp_wav_file.name} not found.")
-
-                    # Call the transcription function with the WAV file path
-                    partial_result = transcribe_core_ws(temp_wav_file.name,
-                                                                               last_transcribed_time)
+                    partial_result = transcribe_core_ws(temp_wav_file)
                     segments.extend(partial_result['segments'])
 
                     # Clear the buffer after transcription
