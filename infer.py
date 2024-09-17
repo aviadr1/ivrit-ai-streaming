@@ -18,7 +18,7 @@ import sys
 import asyncio
 
 # Configure logging
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s %(levelname)s: %(message)s',
+logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s: %(message)s',
                     handlers=[logging.StreamHandler(sys.stdout)], force=True)
 logger = logging.getLogger(__name__)
 #logging.getLogger("asyncio").setLevel(logging.DEBUG)
