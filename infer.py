@@ -126,7 +126,6 @@ async def read_root():
 import tempfile
 
 
-
 def transcribe_core_ws(audio_file, last_transcribed_time):
     """
     Transcribe the audio file and return only the segments that have not been processed yet.
@@ -211,6 +210,7 @@ def validate_wav_file(wav_file_path):
         logging.error(f"Error reading WAV file: {e}")
         return False
 
+
 @app.websocket("/wtranscribe")
 async def websocket_transcribe(websocket: WebSocket):
     logging.info("New WebSocket connection request received.")
@@ -227,7 +227,6 @@ async def websocket_transcribe(websocket: WebSocket):
         pcm_audio_buffer = bytearray()
         logging.info("im here, is it failing?.")
 
-
         # Metadata for the incoming PCM data (sample rate, channels, and sample width should be consistent)
         sample_rate = 16000  # 16kHz
         channels = 1  # Mono
@@ -240,9 +239,13 @@ async def websocket_transcribe(websocket: WebSocket):
             os.makedirs(tmp_directory)
         logging.info("im here, is it failing?2.")
         while True:
+            logging.info("in while true")
             try:
                 # Receive the next chunk of PCM audio data
+                logging.info("in try before recive ")
                 audio_chunk = await websocket.receive_bytes()
+                logging.info("after recieve")
+                sys.stdout.flush()
                 if not audio_chunk:
                     logging.warning("Received empty audio chunk, skipping processing.")
                     continue
@@ -259,7 +262,8 @@ async def websocket_transcribe(websocket: WebSocket):
                 # Estimate the duration of the chunk based on its size
                 chunk_duration = len(audio_chunk) / (sample_rate * channels * sample_width)
                 accumulated_audio_time += chunk_duration
-                logging.info(f"Received and buffered {len(audio_chunk)} bytes, total buffered: {len(pcm_audio_buffer)} bytes, total time: {accumulated_audio_time:.2f} seconds")
+                logging.info(
+                    f"Received and buffered {len(audio_chunk)} bytes, total buffered: {len(pcm_audio_buffer)} bytes, total time: {accumulated_audio_time:.2f} seconds")
 
                 # Transcribe when enough time (audio) is accumulated (e.g., at least 5 seconds of audio)
                 if accumulated_audio_time >= min_transcription_time:
@@ -270,10 +274,10 @@ async def websocket_transcribe(websocket: WebSocket):
                         logging.info(f"Temporary audio file created at {temp_wav_file.name}")
 
                         with wave.open(temp_wav_file.name, 'wb') as wav_file:
-                                wav_file.setnchannels(channels)
-                                wav_file.setsampwidth(sample_width)
-                                wav_file.setframerate(sample_rate)
-                                wav_file.writeframes(pcm_audio_buffer)
+                            wav_file.setnchannels(channels)
+                            wav_file.setsampwidth(sample_width)
+                            wav_file.setframerate(sample_rate)
+                            wav_file.writeframes(pcm_audio_buffer)
 
                         if not validate_wav_file(temp_wav_file.name):
                             logging.error(f"Invalid WAV file created: {temp_wav_file.name}")
@@ -291,7 +295,8 @@ async def websocket_transcribe(websocket: WebSocket):
                         raise Exception(f"Temporary WAV file {temp_wav_file.name} not found.")
 
                     # Call the transcription function with the WAV file path
-                    partial_result, last_transcribed_time = transcribe_core_ws(temp_wav_file.name, last_transcribed_time)
+                    partial_result, last_transcribed_time = transcribe_core_ws(temp_wav_file.name,
+                                                                               last_transcribed_time)
                     processed_segments.extend(partial_result['new_segments'])
 
                     # Clear the buffer after transcription
@@ -321,6 +326,7 @@ async def websocket_transcribe(websocket: WebSocket):
 
     finally:
         logging.info("Cleaning up and closing WebSocket connection.")
+
 
 from fastapi.responses import FileResponse
 
@@ -457,12 +463,6 @@ async def download_audio(filename: str):
 #     return audio_float32
 #
 #
-
-
-
-
-
-
 
 
 # @app.websocket("/wtranscribe")
