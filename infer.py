@@ -1,4 +1,5 @@
 import base64
+import json
 import os
 import wave
 
@@ -16,6 +17,8 @@ from pydantic import BaseModel
 from typing import Optional
 import sys
 import asyncio
+
+from model import segment_to_dict
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s %(levelname)s: %(message)s',
@@ -36,6 +39,61 @@ logging.info(f'Max payload size set to: {MAX_PAYLOAD_SIZE} bytes')
 
 app = FastAPI()
 
+
+# Define Pydantic model for input
+class TranscribeInput(BaseModel):
+    audio: str  # Base64-encoded audio data
+    init_prompt: str = ""
+
+
+
+# Define WebSocket endpoint
+@app.websocket("/ws_transcribe_streaming")
+async def websocket_transcribe(websocket: WebSocket):
+    logger.info("New WebSocket connection request received.")
+    await websocket.accept()
+    logger.info("WebSocket connection established successfully.")
+
+    try:
+        while True:
+            try:
+                # Receive JSON data
+                data = await websocket.receive_json()
+                # Parse input data
+                input_data = TranscribeInput(**data)
+                # Decode base64 audio data
+                audio_bytes = base64.b64decode(input_data.audio)
+                # Write audio data to a temporary file
+                with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_audio_file:
+                    temp_audio_file.write(audio_bytes)
+                    temp_audio_file.flush()
+                    audio_file_path = temp_audio_file.name
+
+                # Call the transcribe function
+                segments, info = await asyncio.to_thread(model.transcribe,
+                    audio_file_path,
+                    language='he',
+                    initial_prompt=input_data.init_prompt,
+                    beam_size=5,
+                    word_timestamps=True,
+                    condition_on_previous_text=True
+                )
+
+                # Convert segments to list and serialize
+                segments_list = list(segments)
+                segments_serializable = [segment_to_dict(s) for s in segments_list]
+
+                # Send the serialized segments back to the client
+                await websocket.send_json(segments_serializable)
+
+            except WebSocketDisconnect:
+                logger.info("WebSocket connection closed by the client.")
+                break
+            except Exception as e:
+                logger.error(f"Unexpected error during WebSocket transcription: {e}")
+                await websocket.send_json({"error": str(e)})
+    finally:
+        logger.info("Cleaning up and closing WebSocket connection.")
 
 # class InputData(BaseModel):
 #     type: str
@@ -439,3 +497,7 @@ async def download_audio(filename: str):
 #
 #     finally:
 #         logging.info("Cleaning up and closing WebSocket connection.")
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app)
