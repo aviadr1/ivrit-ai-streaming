@@ -13,15 +13,15 @@ async def send_audio(websocket):
     buffer_size = 1024 * 16  # Send smaller chunks (16KB) for real-time processing
 
     # Download the WAV file locally
-    with requests.get(AUDIO_FILE_URL, stream=True) as response:
-        if response.status_code == 200:
-            with open('downloaded_audio.wav', 'wb') as f:
-                for chunk in response.iter_content(chunk_size=1024):
-                    f.write(chunk)
-            print("Audio file downloaded successfully.")
+    # with requests.get(AUDIO_FILE_URL, stream=True) as response:
+    #     if response.status_code == 200:
+    #         with open('downloaded_audio.wav', 'wb') as f:
+    #             for chunk in response.iter_content(chunk_size=1024):
+    #                 f.write(chunk)
+    #         print("Audio file downloaded successfully.")
 
             # Open the downloaded WAV file and extract PCM data
-            with wave.open('downloaded_audio.wav', 'rb') as wav_file:
+            with wave.open('test_copy.wav', 'rb') as wav_file:
                 metadata = {
                     'sample_rate': wav_file.getframerate(),
                     'channels': wav_file.getnchannels(),

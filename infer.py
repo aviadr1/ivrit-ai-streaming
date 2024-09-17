@@ -260,9 +260,9 @@ async def websocket_transcribe(websocket: WebSocket):
                     await websocket.send_json(response)
 
                     # Optionally delete the temporary WAV file after processing
-                    if os.path.exists(temp_wav_path):
-                        os.remove(temp_wav_path)
-                        logging.info(f"Temporary WAV file {temp_wav_path} removed.")
+                    if os.path.exists(temp_wav_file):
+                        os.remove(temp_wav_file)
+                        logging.info(f"Temporary WAV file {temp_wav_file} removed.")
 
             except WebSocketDisconnect:
                 logging.info("WebSocket connection closed by the client.")
