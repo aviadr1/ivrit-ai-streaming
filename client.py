@@ -6,6 +6,11 @@ import wave
 import websockets
 import requests
 import ssl
+import sys
+
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s %(levelname)s: %(message)s',
+                    handlers=[logging.StreamHandler(sys.stdout)], force=True)
+logger = logging.getLogger(__name__)
 
 # Parameters for reading and sending the audio
 AUDIO_FILE_URL = "https://raw.githubusercontent.com/AshDavid12/runpod-serverless-forked/main/test_hebrew.wav"  # Use WAV file
@@ -35,6 +40,7 @@ def convert_to_mono_16k(audio_file_path):
 
 
 async def send_audio(websocket):
+    print(f"hi")
     buffer_size = 1024 * 16  # Send smaller chunks (16KB) for real-time processing
     logging.info("Converting the audio to mono and 16kHz.")
 
@@ -60,7 +66,7 @@ async def send_audio(websocket):
         for i in range(0, len(raw_data), buffer_size):
             pcm_chunk = raw_data[i:i + buffer_size]
             await websocket.send(pcm_chunk)  # Send raw PCM data chunk
-            logging.info(f"Sent PCM chunk of size {len(pcm_chunk)} bytes.")
+            #logging.info(f"Sent PCM chunk of size {len(pcm_chunk)} bytes.")
             await asyncio.sleep(0.01)  # Simulate real-time sending
 
         logging.info("Completed sending all audio data.")

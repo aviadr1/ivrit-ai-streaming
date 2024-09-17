@@ -225,6 +225,8 @@ async def websocket_transcribe(websocket: WebSocket):
 
         # A buffer to store raw PCM audio data
         pcm_audio_buffer = bytearray()
+        logging.info("im here, is it failing?.")
+
 
         # Metadata for the incoming PCM data (sample rate, channels, and sample width should be consistent)
         sample_rate = 16000  # 16kHz
@@ -236,7 +238,7 @@ async def websocket_transcribe(websocket: WebSocket):
         if not os.path.exists(tmp_directory):
             logging.info(f"Creating /tmp directory: {tmp_directory}")
             os.makedirs(tmp_directory)
-
+        logging.info("im here, is it failing?2.")
         while True:
             try:
                 # Receive the next chunk of PCM audio data
