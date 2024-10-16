@@ -66,7 +66,7 @@ async def send_audio(websocket):
         for i in range(0, len(raw_data), buffer_size):
             pcm_chunk = raw_data[i:i + buffer_size]
             await websocket.send(pcm_chunk)  # Send raw PCM data chunk
-            #logging.info(f"Sent PCM chunk of size {len(pcm_chunk)} bytes.")
+            logging.info(f"Sent PCM chunk of size {len(pcm_chunk)} bytes.")
             await asyncio.sleep(0.01)  # Simulate real-time sending
 
         logging.info("Completed sending all audio data.")
