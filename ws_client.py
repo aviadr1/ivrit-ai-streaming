@@ -9,7 +9,7 @@ import librosa
 import numpy as np
 
 # Define the default WebSocket endpoint
-DEFAULT_WS_URL = "ws://localhost:4400/ws"
+DEFAULT_WS_URL = "ws://localhost:8000/ws"
 
 
 def parse_arguments():
@@ -108,13 +108,6 @@ async def websocket_client(args):
 
         await send_task  # Ensure all chunks are sent before closing
 
-
-async def run_websocket_client(args):
-    """
-    Entry point to run the WebSocket client using asyncio.
-    """
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(websocket_client(args))
 
 
 if __name__ == "__main__":

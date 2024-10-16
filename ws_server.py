@@ -1,6 +1,7 @@
 # Import the necessary components from whisper_online.py
 import logging
 import os
+from logging import DEBUG
 from typing import Optional
 
 import librosa
@@ -34,7 +35,19 @@ import argparse
 
 # from libs.whisper_streaming.whisper_online_server import online
 
+def my_set_logging(args,logger,other="_server"):
+    logging.basicConfig(#format='%(name)s
+            format='%(levelname)s\t%(message)s')
+    logger.setLevel(args.log_level)
+    logging.getLogger("whisper_online"+other).setLevel(args.log_level)
+#    logging.getLogger("whisper_online_server").setLevel(args.log_level)
+
+
+logging.basicConfig(#format='%(name)s
+            format='%(levelname)s\t%(message)s', level=logging.DEBUG)
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+logging.getLogger("whisper_online").setLevel(logging.DEBUG)
 
 SAMPLING_RATE = 16000
 WARMUP_FILE = "mono16k.test_hebrew.wav"
@@ -203,6 +216,7 @@ async def websocket_endpoint(websocket: WebSocket):
         '--model', 'ivrit-ai/faster-whisper-v2-d4',
         '--backend', 'faster-whisper',
         '--vad',
+        "-l", "DEBUG",
         # '--vac', '--buffer_trimming', 'segment', '--buffer_trimming_sec', '15', '--min_chunk_size', '1.0', '--vac_chunk_size', '0.04', '--start_at', '0.0', '--offline', '--comp_unaware', '--log_level', 'DEBUG'
     ])
 
