@@ -12,7 +12,7 @@ import librosa
 import numpy as np
 
 # Define the default WebSocket endpoint
-DEFAULT_WS_URL = "ws://localhost:8000/v1/audio/transcriptions"
+DEFAULT_WS_URL = "ws://localhost:8000/v1/ws_transcribe_streaming"
 
 
 def parse_arguments():
@@ -247,8 +247,9 @@ def run_websocket_client(args):
     try:
         audio_chunks = read_audio_in_chunks(args.audio_file)
 
-        params = build_query_params(args)
-        ws_url = websocket_url_with_params(args.url, params)
+        # params = build_query_params(args)
+        # ws_url = websocket_url_with_params(args.url, params)
+        ws_url = args.url
 
         ws = websocket.WebSocketApp(
             ws_url,

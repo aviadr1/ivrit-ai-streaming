@@ -1,11 +1,13 @@
 # Import the necessary components from whisper_online.py
 import logging
 import os
+from typing import Optional
 
 import librosa
 import soundfile
 import uvicorn
 from fastapi import FastAPI, WebSocket
+from pydantic import BaseModel, ConfigDict
 from starlette.websockets import WebSocketDisconnect
 
 from libs.whisper_streaming.whisper_online import (
@@ -25,10 +27,12 @@ import argparse
 import sys
 import numpy as np
 import io
-import soundfile as sf
+import soundfile
 import wave
 import requests
 import argparse
+
+# from libs.whisper_streaming.whisper_online_server import online
 
 logger = logging.getLogger(__name__)
 
@@ -36,11 +40,38 @@ SAMPLING_RATE = 16000
 WARMUP_FILE = "mono16k.test_hebrew.wav"
 AUDIO_FILE_URL = "https://raw.githubusercontent.com/AshDavid12/runpod-serverless-forked/main/test_hebrew.wav"
 
-is_first = True
-asr, online = None, None
-min_limit = None  # min_chunk*SAMPLING_RATE
 app = FastAPI()
+args = argparse.ArgumentParser()
+add_shared_args(args)
 
+def drop_option_from_parser(parser, option_name):
+    """
+    Reinitializes the parser and copies all options except the specified option.
+
+    Args:
+        parser (argparse.ArgumentParser): The original argument parser.
+        option_name (str): The option string to drop (e.g., '--model').
+
+    Returns:
+        argparse.ArgumentParser: A new parser without the specified option.
+    """
+    # Create a new parser with the same description and other attributes
+    new_parser = argparse.ArgumentParser(
+        description=parser.description,
+        epilog=parser.epilog,
+        formatter_class=parser.formatter_class
+    )
+
+    # Iterate through all the arguments of the original parser
+    for action in parser._actions:
+        if "-h" in action.option_strings:
+            continue
+
+        # Check if the option is not the one to drop
+        if option_name not in action.option_strings :
+            new_parser._add_action(action)
+
+    return new_parser
 
 def convert_to_mono_16k(input_wav: str, output_wav: str) -> None:
     """
@@ -78,28 +109,68 @@ def download_warmup_file():
         convert_to_mono_16k(audio_file_path, WARMUP_FILE)
 
 
-async def receive_audio_chunk(self, websocket: WebSocket):
+
+
+class State(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    websocket: WebSocket
+    asr: ASRBase
+    online: OnlineASRProcessor
+    min_limit: int
+
+    is_first: bool = True
+    last_end: Optional[float] = None
+
+async def receive_audio_chunk(state: State) -> Optional[np.ndarray]:
     # receive all audio that is available by this time
     # blocks operation if less than self.min_chunk seconds is available
     # unblocks if connection is closed or a chunk is available
     out = []
-    while sum(len(x) for x in out) < min_limit:
-        raw_bytes = await websocket.receive_bytes()
+    while sum(len(x) for x in out) < state.min_limit:
+        raw_bytes = await state.websocket.receive_bytes()
         if not raw_bytes:
             break
-
+#            print("received audio:",len(raw_bytes), "bytes", raw_bytes[:10])
         sf = soundfile.SoundFile(io.BytesIO(raw_bytes), channels=1,endian="LITTLE",samplerate=SAMPLING_RATE, subtype="PCM_16",format="RAW")
         audio, _ = librosa.load(sf,sr=SAMPLING_RATE,dtype=np.float32)
         out.append(audio)
-
     if not out:
         return None
-
-    conc = np.concatenate(out)
-    if self.is_first and len(conc) < min_limit:
+    flat_out = np.concatenate(out)
+    if state.is_first and len(flat_out) < state.min_limit:
         return None
-    self.is_first = False
-    return conc
+
+    state.is_first = False
+    return flat_out
+
+def format_output_transcript(state, o) -> dict:
+    # output format in stdout is like:
+    # 0 1720 Takhle to je
+    # - the first two words are:
+    #    - beg and end timestamp of the text segment, as estimated by Whisper model. The timestamps are not accurate, but they're useful anyway
+    # - the next words: segment transcript
+
+    # This function differs from whisper_online.output_transcript in the following:
+    # succeeding [beg,end] intervals are not overlapping because ELITR protocol (implemented in online-text-flow events) requires it.
+    # Therefore, beg, is max of previous end and current beg outputed by Whisper.
+    # Usually it differs negligibly, by appx 20 ms.
+
+    if o[0] is not None:
+        beg, end = o[0]*1000,o[1]*1000
+        if state.last_end is not None:
+            beg = max(beg, state.last_end)
+
+        state.last_end = end
+        print("%1.0f %1.0f %s" % (beg,end,o[2]),flush=True,file=sys.stderr)
+        return {
+            "start": "%1.0f" % beg,
+            "end": "%1.0f" % end,
+            "text": "%s" % o[2],
+        }
+    else:
+        logger.debug("No text in this segment")
+        return None
 
 # Define WebSocket endpoint
 @app.websocket("/ws_transcribe_streaming")
@@ -108,46 +179,37 @@ async def websocket_transcribe(websocket: WebSocket):
     await websocket.accept()
     logger.info("WebSocket connection established successfully.")
 
+    # initialize the ASR model
+    logger.info("Loading whisper model...")
     asr, online = asr_factory(args)
+    state = State(
+        websocket=websocket,
+        asr=asr,
+        online=online,
+        min_limit=args.min_chunk_size * SAMPLING_RATE,
+    )
 
     # warm up the ASR because the very first transcribe takes more time than the others.
     # Test results in https://github.com/ufal/whisper_streaming/pull/81
+    logger.info("Warming up the whisper model...")
     a = load_audio_chunk(WARMUP_FILE, 0, 1)
     asr.transcribe(a)
     logger.info("Whisper is warmed up.")
-    global min_limit
-    min_limit = args.min_chunk_size * SAMPLING_RATE
 
     try:
-        out = []
         while True:
+            a = await receive_audio_chunk(state)
+            if a is None:
+                break
+            state.online.insert_audio_chunk(a)
+            o = online.process_iter()
             try:
-                # Receive JSON data
-                raw_bytes = await websocket.receive_json()
+                if result := format_output_transcript(state, o):
+                    await websocket.send_json(result)
 
-                sf = soundfile.SoundFile(io.BytesIO(raw_bytes), channels=1, endian="LITTLE", samplerate=SAMPLING_RATE,
-                                         subtype="PCM_16", format="RAW")
-                audio, _ = librosa.load(sf, sr=SAMPLING_RATE, dtype=np.float32)
-                out.append(audio)
-
-                # Call the transcribe function
-                # segments, info = await asyncio.to_thread(model.transcribe,
-                segments, info = model.transcribe(
-                    audio_file_path,
-                    language='he',
-                    initial_prompt=input_data.init_prompt,
-                    beam_size=5,
-                    word_timestamps=True,
-                    condition_on_previous_text=True
-                )
-
-                # Convert segments to list and serialize
-                segments_list = list(segments)
-                segments_serializable = [segment_to_dict(s) for s in segments_list]
-                logger.info(get_raw_words_from_segments(segments_list))
-                # Send the serialized segments back to the client
-                await websocket.send_json(segments_serializable)
-
+            except BrokenPipeError:
+                logger.info("broken pipe -- connection closed?")
+                break
             except WebSocketDisconnect:
                 logger.info("WebSocket connection closed by the client.")
                 break
@@ -158,8 +220,11 @@ async def websocket_transcribe(websocket: WebSocket):
         logger.info("Cleaning up and closing WebSocket connection.")
 
 def main():
-    args = argparse.ArgumentParser()
-    args = add_shared_args(args)
+    global args
+    args = drop_option_from_parser(args, '--model')
+    args.add_argument('--model', type=str,
+                      help="Name size of the Whisper model to use. The model is automatically downloaded from the model hub if not present in model cache dir.")
+
     args.parse_args([
         '--lan', 'he',
         '--model', 'ivrit-ai/faster-whisper-v2-d4',
@@ -168,8 +233,7 @@ def main():
         # '--vac', '--buffer_trimming', 'segment', '--buffer_trimming_sec', '15', '--min_chunk_size', '1.0', '--vac_chunk_size', '0.04', '--start_at', '0.0', '--offline', '--comp_unaware', '--log_level', 'DEBUG'
     ])
 
-
-    global asr, online
-
-
     uvicorn.run(app)
+
+if __name__ == "__main__":
+    main()
