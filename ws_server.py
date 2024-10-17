@@ -1,12 +1,20 @@
 # Import the necessary components from whisper_online.py
+import argparse
 import asyncio
+import io
 import logging
 import os
+import sys
 import time
 
+# Define WebSocket endpoint
+import uuid
+from functools import wraps
 from typing import Optional
 
 import librosa
+import numpy as np
+import requests
 import soundfile
 import torch
 import uvicorn
@@ -14,56 +22,30 @@ from fastapi import FastAPI, WebSocket
 from pydantic import BaseModel, ConfigDict
 from starlette.websockets import WebSocketDisconnect
 
-from libs.whisper_streaming.whisper_online import (
+from libs.whisper_streaming.whisper_online import (  # add_shared_args,
     ASRBase,
     OnlineASRProcessor,
-    VACOnlineASRProcessor,
-    # add_shared_args,
+    add_shared_args,
     asr_factory,
-    set_logging,
-    create_tokenizer,
-    load_audio,
-    load_audio_chunk, OpenaiApiASR,
-    set_logging, add_shared_args
+    load_audio_chunk,
 )
-
-import argparse
-import sys
-import numpy as np
-import io
-import soundfile
-import wave
-import requests
-import argparse
-import torch
-import logging
-
-# Define WebSocket endpoint
-import uuid
-
-import time
-import logging
-from functools import wraps
-
 
 # from libs.whisper_streaming.whisper_online_server import online
 
-def my_set_logging(args,logger,other="_server"):
-    logging.basicConfig(#format='%(name)s
-            format='%(levelname)s\t%(message)s')
+
+def my_set_logging(args, logger, other="_server"):
+    logging.basicConfig(format="%(levelname)s\t%(message)s")  # format='%(name)s
     logger.setLevel(args.log_level)
-    logging.getLogger("whisper_online"+other).setLevel(args.log_level)
+    logging.getLogger("whisper_online" + other).setLevel(args.log_level)
+
+
 #    logging.getLogger("whisper_online_server").setLevel(args.log_level)
 
 
-logging.basicConfig(#format='%(name)s
-            format='%(levelname)s\t%(message)s', level=logging.INFO)
+logging.basicConfig(format="%(levelname)s\t%(message)s", level=logging.INFO)  # format='%(name)s
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 logging.getLogger("whisper_online").setLevel(logging.INFO)
-
-
-
 
 
 SAMPLING_RATE = 16000
@@ -95,8 +77,9 @@ args = argparse.ArgumentParser()
 
 def check_fp16_support():
     """
-    Checks whether FP16 (half precision) is supported on the available CUDA device by examining
-    the device's compute capability and logs relevant information about the PyTorch and CUDA versions.
+    Checks whether FP16 (half precision) is supported on the available CUDA device by
+    examining the device's compute capability and logs relevant information about the
+    PyTorch and CUDA versions.
 
     FP16 (half precision) is supported if:
       - The GPU's compute capability is >= 5.3
@@ -138,7 +121,7 @@ def check_fp16_support():
     logging.info(f"CUDA version: {torch.version.cuda}")
 
     # Determine if CUDA is available, otherwise default to CPU
-    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    device = "cuda" if torch.cuda.is_available() else "cpu"
     logging.info(f"Device selected: {device}")
 
     # Check if CUDA is available and inspect the device capabilities
@@ -176,9 +159,7 @@ def drop_option_from_parser(parser, option_name):
     """
     # Create a new parser with the same description and other attributes
     new_parser = argparse.ArgumentParser(
-        description=parser.description,
-        epilog=parser.epilog,
-        formatter_class=parser.formatter_class
+        description=parser.description, epilog=parser.epilog, formatter_class=parser.formatter_class
     )
 
     # Iterate through all the arguments of the original parser
@@ -187,10 +168,11 @@ def drop_option_from_parser(parser, option_name):
             continue
 
         # Check if the option is not the one to drop
-        if option_name not in action.option_strings :
+        if option_name not in action.option_strings:
             new_parser._add_action(action)
 
     return new_parser
+
 
 def convert_to_mono_16k(input_wav: str, output_wav: str) -> None:
     """
@@ -216,18 +198,17 @@ def convert_to_mono_16k(input_wav: str, output_wav: str) -> None:
 
     logger.info(f"Converted audio saved to {output_wav}")
 
+
 def download_warmup_file():
     # Download the audio file if not already present
     audio_file_path = "test_hebrew.wav"
     if not os.path.exists(WARMUP_FILE):
         if not os.path.exists(audio_file_path):
             response = requests.get(AUDIO_FILE_URL)
-            with open(audio_file_path, 'wb') as f:
+            with open(audio_file_path, "wb") as f:
                 f.write(response.content)
 
         convert_to_mono_16k(audio_file_path, WARMUP_FILE)
-
-
 
 
 class State(BaseModel):
@@ -246,7 +227,9 @@ class State(BaseModel):
 
 async def receive_audio_chunk(state: State) -> Optional[np.ndarray]:
     """
-    Receives audio chunks from the WebSocket connection and processes them. Keeps the last read task open to improve performance.
+    Receives audio chunks from the WebSocket connection and processes them.
+
+    Keeps the last read task open to improve performance.
     """
     # Initialize the buffer for audio chunks
     out = []
@@ -270,10 +253,10 @@ async def receive_audio_chunk(state: State) -> Optional[np.ndarray]:
 
                 if chunk:
                     # Process the received chunk
-                    audio_chunk = np.frombuffer(chunk, dtype='<i2')  # Little-endian 16-bit PCM
+                    audio_chunk = np.frombuffer(chunk, dtype="<i2")  # Little-endian 16-bit PCM
                     out.append(audio_chunk)
 
-                    if current_size >= 4 *  state.min_limit:
+                    if current_size >= 4 * state.min_limit:
                         break
                 else:
                     # If no chunk received, and enough data has been collected, stop
@@ -303,15 +286,21 @@ async def receive_audio_chunk(state: State) -> Optional[np.ndarray]:
     concatenated_audio = np.concatenate(out)
 
     # Use soundfile to handle audio processing
-    sf = soundfile.SoundFile(io.BytesIO(concatenated_audio), channels=1, endian="LITTLE", samplerate=SAMPLING_RATE,
-                             subtype="PCM_16", format="RAW")
+    sf = soundfile.SoundFile(
+        io.BytesIO(concatenated_audio),
+        channels=1,
+        endian="LITTLE",
+        samplerate=SAMPLING_RATE,
+        subtype="PCM_16",
+        format="RAW",
+    )
 
     # Load the audio with librosa for further processing
     audio, _ = librosa.load(sf, sr=SAMPLING_RATE, dtype=np.float32)
 
     # Save the received audio to the .wav file if enabled
     if state.wav_file is not None:
-        state.wav_file.buffer_write(concatenated_audio, dtype='int16')
+        state.wav_file.buffer_write(concatenated_audio, dtype="int16")
 
     # If this is the first chunk and it's too short, skip processing
     if state.is_first and len(audio) < state.min_limit:
@@ -322,7 +311,6 @@ async def receive_audio_chunk(state: State) -> Optional[np.ndarray]:
     state.is_first = False
 
     return audio
-
 
 
 def format_output_transcript(state, o) -> dict:
@@ -338,12 +326,12 @@ def format_output_transcript(state, o) -> dict:
     # Usually it differs negligibly, by appx 20 ms.
 
     if o[0] is not None:
-        beg, end = o[0]*1000,o[1]*1000
+        beg, end = o[0] * 1000, o[1] * 1000
         if state.last_end is not None:
             beg = max(beg, state.last_end)
 
         state.last_end = end
-        print("%1.0f %1.0f %s" % (beg,end,o[2]),flush=True,file=sys.stderr)
+        print("%1.0f %1.0f %s" % (beg, end, o[2]), flush=True, file=sys.stderr)
         return {
             "start": "%1.0f" % beg,
             "end": "%1.0f" % end,
@@ -352,7 +340,6 @@ def format_output_transcript(state, o) -> dict:
     else:
         logger.debug("No text in this segment")
         return None
-
 
 
 def perf(func):
@@ -391,8 +378,8 @@ def perf(func):
 
 def get_next_processing_duration(asr_processor: OnlineASRProcessor) -> float:
     """
-    Returns the number of fractional seconds of audio that will be processed
-    by the given OnlineASRProcessor when `process_iter` is run.
+    Returns the number of fractional seconds of audio that will be processed by the
+    given OnlineASRProcessor when `process_iter` is run.
 
     Args:
         asr_processor (OnlineASRProcessor): The ASR processor instance to inspect.
@@ -415,24 +402,34 @@ async def websocket_endpoint(websocket: WebSocket, save_audio: bool = True):
     await websocket.accept()
     logger.info("WebSocket connection established successfully.")
 
-    parsed_args = args.parse_args([
-        '--lan', 'he',
-        '--model', 'ivrit-ai/faster-whisper-v2-d4',
-        # '--model', 'ivrit-ai/whisper-large-v3-turbo-d4-p1-take2',
-        '--backend', 'faster-whisper',
-        '--vad',
-        "--vac",
-        "-l", "DEBUG",
-        # "--buffer_trimming", "sentence",
-        "--buffer_trimming_sec", "8",
-        "--min-chunk-size", "1"
-    ])
+    parsed_args = args.parse_args(
+        [
+            "--lan",
+            "he",
+            "--model",
+            "ivrit-ai/faster-whisper-v2-d4",
+            # '--model', 'ivrit-ai/whisper-large-v3-turbo-d4-p1-take2',
+            "--backend",
+            "faster-whisper",
+            "--vad",
+            "--vac",
+            "-l",
+            "DEBUG",
+            # "--buffer_trimming", "sentence",
+            "--buffer_trimming_sec",
+            "8",
+            "--min-chunk-size",
+            "1",
+        ]
+    )
 
     # Optionally create a unique .wav file for debugging
     if save_audio:
         wav_filename = f"received_audio_{uuid.uuid4()}.wav"
         logger.info(f"Saving received audio to file: {wav_filename}")
-        wav_file = soundfile.SoundFile(wav_filename, mode='w', samplerate=SAMPLING_RATE, channels=1, subtype='PCM_16', endian='LITTLE')
+        wav_file = soundfile.SoundFile(
+            wav_filename, mode="w", samplerate=SAMPLING_RATE, channels=1, subtype="PCM_16", endian="LITTLE"
+        )
 
     def init_model():
         # initialize the ASR model
@@ -492,9 +489,12 @@ def main():
     global args
     add_shared_args(args)
 
-    args = drop_option_from_parser(args, '--model')
-    args.add_argument('--model', type=str,
-                      help="Name size of the Whisper model to use. The model is automatically downloaded from the model hub if not present in model cache dir.")
+    args = drop_option_from_parser(args, "--model")
+    args.add_argument(
+        "--model",
+        type=str,
+        help="Name size of the Whisper model to use. The model is automatically downloaded from the model hub if not present in model cache dir.",
+    )
 
 
 check_fp16_support()
