@@ -30,10 +30,12 @@ from libs.whisper_streaming.whisper_online import (  # add_shared_args,
     load_audio_chunk,
 )
 
+
 def my_set_logging(args, logger, other="_server"):
     logging.basicConfig(format="%(levelname)s\t%(message)s")  # format='%(name)s
     logger.setLevel(args.log_level)
     logging.getLogger("whisper_online" + other).setLevel(args.log_level)
+
 
 logging.basicConfig(format="%(levelname)s\t%(message)s", level=logging.INFO)  # format='%(name)s
 logger = logging.getLogger(__name__)
