@@ -13,6 +13,20 @@ license: mit
 
 This project builds a streaming Speech-to-Text (STT) server for Hebrew. It leverages a combination of powerful tools to enable real-time transcription using models compatible with **faster-whisper**.
 
+## Running the Server
+
+The server can be run
+
+```bash
+poetry run fastapi run ws_server.py
+```
+
+and for the client:
+```commandline
+poetry run python ws_client.py <audio_file>
+```
+
+
 ## Components
 
 1. **Ivrit-AI Model**: 
