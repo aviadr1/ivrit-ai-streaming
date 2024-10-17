@@ -1,11 +1,14 @@
 # Import the necessary components from whisper_online.py
+import asyncio
 import logging
 import os
-from logging import DEBUG
+import time
+
 from typing import Optional
 
 import librosa
 import soundfile
+import torch
 import uvicorn
 from fastapi import FastAPI, WebSocket
 from pydantic import BaseModel, ConfigDict
@@ -32,6 +35,8 @@ import soundfile
 import wave
 import requests
 import argparse
+import torch
+import logging
 
 # from libs.whisper_streaming.whisper_online_server import online
 
@@ -44,10 +49,14 @@ def my_set_logging(args,logger,other="_server"):
 
 
 logging.basicConfig(#format='%(name)s
-            format='%(levelname)s\t%(message)s', level=logging.DEBUG)
+            format='%(levelname)s\t%(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
-logging.getLogger("whisper_online").setLevel(logging.DEBUG)
+logging.getLogger("whisper_online").setLevel(logging.INFO)
+
+
+
+
 
 SAMPLING_RATE = 16000
 WARMUP_FILE = "mono16k.test_hebrew.wav"
@@ -74,6 +83,76 @@ args = argparse.ArgumentParser()
 #     parser.add_argument('--buffer_trimming', type=str, default="segment", choices=["sentence", "segment"],help='Buffer trimming strategy -- trim completed sentences marked with punctuation mark and detected by sentence segmenter, or the completed segments returned by Whisper. Sentence segmenter must be installed for "sentence" option.')
 #     parser.add_argument('--buffer_trimming_sec', type=float, default=15, help='Buffer trimming length threshold in seconds. If buffer length is longer, trimming sentence/segment is triggered.')
 #     parser.add_argument("-l", "--log-level", dest="log_level", choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'], help="Set the log level", default='DEBUG')
+
+
+def check_fp16_support():
+    """
+    Checks whether FP16 (half precision) is supported on the available CUDA device by examining
+    the device's compute capability and logs relevant information about the PyTorch and CUDA versions.
+
+    FP16 (half precision) is supported if:
+      - The GPU's compute capability is >= 5.3
+      - CUDA is available
+
+    Returns:
+      - A log with the PyTorch version, CUDA version, device information, and whether FP16 is supported.
+
+    Example Output (FP16 Supported):
+    -------------------------------
+    PyTorch version: 1.12.0
+    CUDA version: 11.6
+    Device selected: cuda
+    Device: NVIDIA Tesla V100-SXM2-16GB
+    Compute Capability: (7, 0)
+    FP16 support: Yes (Compute capability >= 5.3)
+
+    Example Output (FP16 Not Supported):
+    ------------------------------------
+    PyTorch version: 1.12.0
+    CUDA version: 11.6
+    Device selected: cuda
+    Device: NVIDIA GeForce GTX 750
+    Compute Capability: (5, 0)
+    FP16 support: No (Compute capability < 5.3)
+
+    Example Output (No CUDA Device):
+    --------------------------------
+    PyTorch version: 1.12.0
+    CUDA version: None
+    Device selected: cpu
+    No CUDA device found. FP16 support: Not available.
+    """
+
+    # Log the PyTorch version
+    logging.info(f"PyTorch version: {torch.__version__}")
+
+    # Log the installed CUDA version, this will be None if CUDA is not available
+    logging.info(f"CUDA version: {torch.version.cuda}")
+
+    # Determine if CUDA is available, otherwise default to CPU
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    logging.info(f"Device selected: {device}")
+
+    # Check if CUDA is available and inspect the device capabilities
+    if torch.cuda.is_available():
+        # Get the name of the CUDA device (e.g., "NVIDIA Tesla V100")
+        device_name = torch.cuda.get_device_name(0)
+
+        # Get the compute capability of the device (e.g., (7, 0) for Volta GPUs)
+        compute_capability = torch.cuda.get_device_capability(0)
+
+        # Log the device name and compute capability
+        logging.info(f"Device: {device_name}")
+        logging.info(f"Compute Capability: {compute_capability}")
+
+        # Compute capability >= 5.3 indicates FP16 support for most GPUs
+        if compute_capability >= (5, 3):
+            logging.info("FP16 support: Yes (Compute capability >= 5.3)")
+        else:
+            logging.info("FP16 support: No (Compute capability < 5.3)")
+    else:
+        # If no CUDA device is available, log that FP16 is not supported
+        logging.info("No CUDA device found. FP16 support: Not available.")
 
 
 def drop_option_from_parser(parser, option_name):
@@ -153,28 +232,39 @@ class State(BaseModel):
 
     is_first: bool = True
     last_end: Optional[float] = None
+    wav_file: Optional[soundfile.SoundFile] = None
+
 
 async def receive_audio_chunk(state: State) -> Optional[np.ndarray]:
     # receive all audio that is available by this time
-    # blocks operation if less than self.min_chunk seconds is available
-    # unblocks if connection is closed or a chunk is available
     out = []
     while sum(len(x) for x in out) < state.min_limit:
-        raw_bytes = await state.websocket.receive_bytes()
-        if not raw_bytes:
+        chunk = await state.websocket.receive_bytes()
+        if not chunk:
             break
-#            print("received audio:",len(raw_bytes), "bytes", raw_bytes[:10])
-        sf = soundfile.SoundFile(io.BytesIO(raw_bytes), channels=1,endian="LITTLE",samplerate=SAMPLING_RATE, subtype="PCM_16",format="RAW")
-        audio, _ = librosa.load(sf,sr=SAMPLING_RATE,dtype=np.float32)
-        out.append(audio)
+
+        audio_chunk = np.frombuffer(chunk, dtype='<i2')  # Little-endian 16-bit PCM
+        out.append(audio_chunk)
+
     if not out:
         return None
-    flat_out = np.concatenate(out)
-    if state.is_first and len(flat_out) < state.min_limit:
+
+    concatenated_audio = np.concatenate(out)
+    sf = soundfile.SoundFile(io.BytesIO(concatenated_audio), channels=1, endian="LITTLE", samplerate=SAMPLING_RATE,
+                                 subtype="PCM_16", format="RAW")
+    audio, _ = librosa.load(sf, sr=SAMPLING_RATE, dtype=np.float32)
+
+    # Save the received audio to the .wav file if enabled
+    if state.wav_file is not None:
+        state.wav_file.buffer_write(concatenated_audio, dtype='int16')
+
+    if state.is_first and len(audio) < state.min_limit:
+        logger.error("First chunk is too short, skipping")
         return None
 
     state.is_first = False
-    return flat_out
+    return audio
+
 
 def format_output_transcript(state, o) -> dict:
     # output format in stdout is like:
@@ -205,46 +295,128 @@ def format_output_transcript(state, o) -> dict:
         return None
 
 # Define WebSocket endpoint
+import uuid
+
+import time
+import logging
+from functools import wraps
+
+
+def perf(func):
+    """
+    A decorator to measure and log the execution time of a function.
+
+    Args:
+        func: The function to decorate.
+
+    Returns:
+        Wrapped function with added performance logging.
+    """
+
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        # Start the timer
+        start_time = time.perf_counter()
+
+        # Execute the original function
+        result = func(*args, **kwargs)
+
+        # Stop the timer
+        end_time = time.perf_counter()
+
+        # Calculate the elapsed time
+        elapsed_time = end_time - start_time
+
+        # Log the performance
+        logging.info(f"{func.__name__} took {elapsed_time:.6f} seconds.")
+
+        # Return the result of the original function
+        return result
+
+    return wrapper
+
+
+def get_next_processing_duration(asr_processor: OnlineASRProcessor) -> float:
+    """
+    Returns the number of fractional seconds of audio that will be processed
+    by the given OnlineASRProcessor when `process_iter` is run.
+
+    Args:
+        asr_processor (OnlineASRProcessor): The ASR processor instance to inspect.
+
+    Returns:
+        float: The number of seconds of audio that will be passed for transcription.
+    """
+    # Length of the audio buffer in samples
+    buffer_length_in_samples = len(asr_processor.audio_buffer)
+
+    # Convert samples to seconds using the sampling rate
+    buffer_length_in_seconds = buffer_length_in_samples / asr_processor.SAMPLING_RATE
+
+    return buffer_length_in_seconds
+
+
 @app.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket):
+async def websocket_endpoint(websocket: WebSocket, save_audio: bool = True):
     logger.info("New WebSocket connection request received.")
     await websocket.accept()
     logger.info("WebSocket connection established successfully.")
 
     parsed_args = args.parse_args([
-        '--lan', 'he',
+        '--lan', 'en',
         '--model', 'ivrit-ai/faster-whisper-v2-d4',
+        # '--model', 'ivrit-ai/whisper-large-v3-turbo-d4-p1-take2',
         '--backend', 'faster-whisper',
         '--vad',
+        "--vac",
         "-l", "DEBUG",
-        # '--vac', '--buffer_trimming', 'segment', '--buffer_trimming_sec', '15', '--min_chunk_size', '1.0', '--vac_chunk_size', '0.04', '--start_at', '0.0', '--offline', '--comp_unaware', '--log_level', 'DEBUG'
+        # "--buffer_trimming", "sentence",
+        "--buffer_trimming_sec", "2",
+        "--min-chunk-size", "2"
     ])
 
-    # initialize the ASR model
-    logger.info("Loading whisper model...")
-    asr, online = asr_factory(parsed_args)
-    state = State(
-        websocket=websocket,
-        asr=asr,
-        online=online,
-        min_limit=parsed_args.min_chunk_size * SAMPLING_RATE,
-    )
+    # Optionally create a unique .wav file for debugging
+    if save_audio:
+        wav_filename = f"received_audio_{uuid.uuid4()}.wav"
+        logger.info(f"Saving received audio to file: {wav_filename}")
+        wav_file = soundfile.SoundFile(wav_filename, mode='w', samplerate=SAMPLING_RATE, channels=1, subtype='PCM_16', endian='LITTLE')
 
-    # warm up the ASR because the very first transcribe takes more time than the others.
-    # Test results in https://github.com/ufal/whisper_streaming/pull/81
-    logger.info("Warming up the whisper model...")
-    a = load_audio_chunk(WARMUP_FILE, 0, 1)
-    asr.transcribe(a)
-    logger.info("Whisper is warmed up.")
+    def init_model():
+        # initialize the ASR model
+        logger.info("Loading whisper model...")
+        asr, online = asr_factory(parsed_args)
+        state = State(
+            websocket=websocket,
+            asr=asr,
+            online=online,
+            min_limit=parsed_args.min_chunk_size * SAMPLING_RATE,
+            wav_file=wav_file if save_audio else None,
+        )
+
+        logger.info("Warming up the whisper model...")
+        a = load_audio_chunk(WARMUP_FILE, 0, 1)
+        asr.transcribe(a)
+        logger.info("Whisper is warmed up.")
+        return state
+
+    state = await asyncio.to_thread(init_model)
+
+    @perf
+    def process(audio):
+        state.online.insert_audio_chunk(a)
+        logger.info(f"Processing audio chunk..., now having {get_next_processing_duration(state.online):.2f} seconds")
+        o = state.online.process_iter()
+        logger.info(f"After processing, buffer of {get_next_processing_duration(state.online):.2f} seconds left")
+        return o
 
     try:
         while True:
-            a = await receive_audio_chunk(state)
+            a = await receive_audio_chunk(state)  # Pass wav_file to save audio
             if a is None:
                 break
-            state.online.insert_audio_chunk(a)
-            o = online.process_iter()
+
             try:
+                o = await asyncio.to_thread(process, a)
                 if result := format_output_transcript(state, o):
                     await websocket.send_json(result)
 
@@ -259,7 +431,8 @@ async def websocket_endpoint(websocket: WebSocket):
                 await websocket.send_json({"error": str(e)})
     finally:
         logger.info("Cleaning up and closing WebSocket connection.")
-
+        if save_audio:
+            wav_file.close()  # Close the wav file
 
 
 def main():
@@ -271,8 +444,8 @@ def main():
                       help="Name size of the Whisper model to use. The model is automatically downloaded from the model hub if not present in model cache dir.")
 
 
+check_fp16_support()
+main()  # ran by fastapi/uvicorn cli
 
-
-main()
 if __name__ == "__main__":
     uvicorn.run(app, port=4400)

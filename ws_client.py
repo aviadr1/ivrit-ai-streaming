@@ -4,9 +4,11 @@ import asyncio
 from pathlib import Path
 from typing import List
 import websockets
+import websockets.asyncio.client
 import os
 import librosa
 import numpy as np
+import soundfile
 
 # Define the default WebSocket endpoint
 DEFAULT_WS_URL = "ws://localhost:8000/ws"
@@ -43,25 +45,21 @@ def read_audio_in_chunks(audio_file, target_sr=16000, chunk_duration=1) -> List[
             os.system(command)
         audio_file = wav_file
 
-    audio_data, sr = librosa.load(audio_file, sr=None, mono=True)
+    # Read audio using soundfile
+    with soundfile.SoundFile(audio_file) as f:
+        if f.samplerate != target_sr:
+            raise ValueError(f"Unexpected sample rate {f.samplerate}. Expected {target_sr}.")
 
-    if sr != target_sr:
-        raise ValueError(f"Unexpected sample rate {sr}. Expected {target_sr}.")
+        # Read the entire audio file as an array
+        audio_data = f.read(dtype='int16')
 
-    audio_data_int16 = (audio_data * 32767).astype(np.int16)
-
-    if audio_data_int16.dtype.byteorder == '>' or (
-            audio_data_int16.dtype.byteorder == '=' and np.dtype(np.int16).byteorder == '>'):
-        print("Byte swap performed to convert to little-endian.")
-        audio_data_little_endian = audio_data_int16.byteswap().newbyteorder('L')
-    else:
-        print("No byte swap needed. Already little-endian.")
-        audio_data_little_endian = audio_data_int16
-
+    # Calculate the number of samples per chunk
     samples_per_chunk = target_sr * chunk_duration
+
+    # Split the audio into chunks
     chunks = [
-        audio_data_little_endian[i:i + samples_per_chunk]
-        for i in range(0, len(audio_data_little_endian), samples_per_chunk)
+        audio_data[i:i + samples_per_chunk]
+        for i in range(0, len(audio_data), samples_per_chunk)
     ]
 
     return chunks
@@ -72,10 +70,9 @@ async def send_audio_chunks(ws, audio_chunks):
     Asynchronously send audio chunks to the WebSocket server.
     """
     for idx, chunk in enumerate(audio_chunks):
-        audio_bytes = chunk.astype('<f4').tobytes()  # Convert to little-endian float32
-        await ws.send(audio_bytes)
+        await ws.send(chunk.tobytes())
         print(f"Sent chunk {idx + 1}/{len(audio_chunks)}")
-        await asyncio.sleep(0.1)  # Simulate real-time streaming
+        await asyncio.sleep(0.9)  # Simulate real-time streaming
     print("All audio chunks sent")
 
 
@@ -85,7 +82,7 @@ async def websocket_client(args):
     """
     audio_chunks = read_audio_in_chunks(args.audio_file)
 
-    async with websockets.connect(args.url) as ws:
+    async with websockets.asyncio.client.connect(args.url, ping_interval=1, ping_timeout=10) as ws:
         print("WebSocket connection opened")
 
         # Start sending audio chunks
@@ -95,12 +92,7 @@ async def websocket_client(args):
         try:
             async for message in ws:
                 data = json.loads(message)
-                if args.response_format == "verbose_json":
-                    segments = data.get('segments', [])
-                    for segment in segments:
-                        print(f"Received segment: {segment['text']}")
-                else:
-                    print(f"Transcription: {data['text']}")
+                print(f"Transcription: {data}")
         except websockets.exceptions.ConnectionClosedOK:
             print("Connection closed normally")
         except Exception as e:

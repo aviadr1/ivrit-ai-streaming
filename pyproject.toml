@@ -28,13 +28,13 @@ python = "3.11.7"
 torch = { version = "^2.0", source = "pytorch" }
 whisper = "^1.1.10"
 requests = "^2.32.3"
-transformers = "^4.44.2"
+transformers = "^4.0"
 soundfile = "^0.12.1"
 faster-whisper = "^1.0.3"
 # fastapi = "^0.114.2"
 websockets = "^13.0.1"
 #websocket-client = "^1.8.0"
-librosa = "^0.10.2.post1"
+#librosa = "^0.10.2.post1"
 uvicorn = "^0.30.6"
 # torchaudio = "^2.4.1"
 torchaudio = { version = "^2.0", source = "pytorch" }
@@ -49,6 +49,8 @@ silero-vad = "^5.1"
 #ffmpeg = "^1.4"
 #aiohttp = "^3.10.10"
 fastapi = {extras = ["standard"], version = "^0.115.2"}
+wtpsplit = "^2.1.0"
+librosa = "^0.10.2.post1"
 
 
 [[tool.poetry.source]]
