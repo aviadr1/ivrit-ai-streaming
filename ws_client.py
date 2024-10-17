@@ -31,7 +31,7 @@ def parse_arguments():
     )
     parser.add_argument("--temperature", type=float, default=0.0, help="Temperature for transcription.")
     parser.add_argument("--vad_filter", action="store_true", help="Enable voice activity detection filter.")
-    parser.add_argument("--chunk_duration", type=float, default=1, help="Duration of each audio chunk in seconds.")
+    parser.add_argument("--chunk_duration", type=float, default=0.2, help="Duration of each audio chunk in seconds.")
     return parser.parse_args()
 
 
