@@ -247,59 +247,53 @@ class State(BaseModel):
 async def receive_audio_chunk(state: State) -> Optional[np.ndarray]:
     """
     Receives audio chunks from the WebSocket connection and processes them. Keeps the last read task open to improve performance.
-    Leaves a read task pending when leaving the method unless there is an error.
     """
     # Initialize the buffer for audio chunks
     out = []
 
-    try:
-        while True:
-            current_size = sum(len(chunk) for chunk in out)
+    while True:
+        try:
+            # Create the read task if not already created or completed
+            if not state.read_task or state.read_task.done():
+                state.read_task = asyncio.create_task(state.websocket.receive_bytes())
 
-            have_read = False
-            # Check if the current read task is done
-            if state.read_task and state.read_task.done():
-                # Get the result immediately
-                chunk = state.read_task.result()
-                state.read_task = None  # Task completed, mark it as None for re-creation
+            current_size = sum(len(chunk) for chunk in out)
+            # Wait for the read task with the timeout
+            done, _ = await asyncio.wait([state.read_task], timeout=0, return_when=asyncio.FIRST_COMPLETED)
+
+            # If the task is done, process the chunk
+            if done:
+                chunk = state.read_task.result()  # Get the result of the task
+
+                # Reset the task so it will be created again next time
+                state.read_task = None
 
                 if chunk:
                     # Process the received chunk
                     audio_chunk = np.frombuffer(chunk, dtype='<i2')  # Little-endian 16-bit PCM
                     out.append(audio_chunk)
-                    have_read = True
 
-            # If the task isn't done and we need more data, wait for the task to complete
-            if not state.read_task:
-                # Create a new read task if one doesn't exist
-                state.read_task = asyncio.create_task(state.websocket.receive_bytes())
-
-            if not have_read:
-                if current_size >= state.min_limit:
-                    break
+                    if current_size >= 4 *  state.min_limit:
+                        break
                 else:
-                    # Wait for the task to complete if it is still running
-                    await asyncio.wait([state.read_task], timeout=1, return_when=asyncio.FIRST_COMPLETED)
+                    # If no chunk received, and enough data has been collected, stop
+                    if current_size >= state.min_limit:
+                        break
+                    else:
+                        await asyncio.sleep(0.5)
 
-    except asyncio.TimeoutError:
-        # Timeout without receiving, exit the loop if enough data was gathered
-        if current_size >= state.min_limit:
-            pass  # We can exit if enough data was gathered, no need to raise an exception
-
-    except WebSocketDisconnect:
-        # Handle WebSocket disconnection gracefully
-        logger.info("WebSocket connection closed by the client.")
-        return None
-
-    except Exception as e:
-        # Log any unexpected errors and make sure no read task is pending
-        logger.error(f"Error receiving audio chunk: {e}")
-        state.read_task = None
-
-    finally:
-        # Ensure a new read task is created for future calls if none is pending
-        if not state.read_task or state.read_task.done():
-            state.read_task = asyncio.create_task(state.websocket.receive_bytes())
+        except asyncio.TimeoutError:
+            # Timeout without receiving, exit the loop if enough data was gathered
+            if current_size >= state.min_limit:
+                break
+        except WebSocketDisconnect:
+            # Handle WebSocket disconnection gracefully
+            logger.info("WebSocket connection closed by the client.")
+            break
+        except Exception as e:
+            # Log any unexpected errors
+            logger.error(f"Error receiving audio chunk: {e}")
+            break
 
     # If no audio chunks were received, return None
     if not out:
@@ -328,7 +322,6 @@ async def receive_audio_chunk(state: State) -> Optional[np.ndarray]:
     state.is_first = False
 
     return audio
-
 
 
 
