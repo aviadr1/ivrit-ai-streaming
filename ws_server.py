@@ -38,6 +38,14 @@ import argparse
 import torch
 import logging
 
+# Define WebSocket endpoint
+import uuid
+
+import time
+import logging
+from functools import wraps
+
+
 # from libs.whisper_streaming.whisper_online_server import online
 
 def my_set_logging(args,logger,other="_server"):
@@ -229,6 +237,7 @@ class State(BaseModel):
     asr: ASRBase
     online: OnlineASRProcessor
     min_limit: int
+    read_task: Optional[asyncio.Task] = None
 
     is_first: bool = True
     last_end: Optional[float] = None
@@ -236,34 +245,84 @@ class State(BaseModel):
 
 
 async def receive_audio_chunk(state: State) -> Optional[np.ndarray]:
-    # receive all audio that is available by this time
+    """
+    Receives audio chunks from the WebSocket connection and processes them. Keeps the last read task open to improve performance.
+    """
+    # Initialize the buffer for audio chunks
     out = []
-    while sum(len(x) for x in out) < state.min_limit:
-        chunk = await state.websocket.receive_bytes()
-        if not chunk:
+
+    while True:
+        try:
+            # Create the read task if not already created or completed
+            if not state.read_task or state.read_task.done():
+                state.read_task = asyncio.create_task(state.websocket.receive_bytes())
+
+            current_size = sum(len(chunk) for chunk in out)
+            # Wait for the read task with the timeout
+            done, _ = await asyncio.wait([state.read_task], timeout=0, return_when=asyncio.FIRST_COMPLETED)
+
+            # If the task is done, process the chunk
+            if done:
+                chunk = state.read_task.result()  # Get the result of the task
+
+                # Reset the task so it will be created again next time
+                state.read_task = None
+
+                if chunk:
+                    # Process the received chunk
+                    audio_chunk = np.frombuffer(chunk, dtype='<i2')  # Little-endian 16-bit PCM
+                    out.append(audio_chunk)
+
+                    if current_size >= 4 *  state.min_limit:
+                        break
+                else:
+                    # If no chunk received, and enough data has been collected, stop
+                    if current_size >= state.min_limit:
+                        break
+                    else:
+                        await asyncio.sleep(0.5)
+
+        except asyncio.TimeoutError:
+            # Timeout without receiving, exit the loop if enough data was gathered
+            if current_size >= state.min_limit:
+                break
+        except WebSocketDisconnect:
+            # Handle WebSocket disconnection gracefully
+            logger.info("WebSocket connection closed by the client.")
+            break
+        except Exception as e:
+            # Log any unexpected errors
+            logger.error(f"Error receiving audio chunk: {e}")
             break
 
-        audio_chunk = np.frombuffer(chunk, dtype='<i2')  # Little-endian 16-bit PCM
-        out.append(audio_chunk)
-
+    # If no audio chunks were received, return None
     if not out:
         return None
 
+    # Concatenate the received audio chunks
     concatenated_audio = np.concatenate(out)
+
+    # Use soundfile to handle audio processing
     sf = soundfile.SoundFile(io.BytesIO(concatenated_audio), channels=1, endian="LITTLE", samplerate=SAMPLING_RATE,
-                                 subtype="PCM_16", format="RAW")
+                             subtype="PCM_16", format="RAW")
+
+    # Load the audio with librosa for further processing
     audio, _ = librosa.load(sf, sr=SAMPLING_RATE, dtype=np.float32)
 
     # Save the received audio to the .wav file if enabled
     if state.wav_file is not None:
         state.wav_file.buffer_write(concatenated_audio, dtype='int16')
 
+    # If this is the first chunk and it's too short, skip processing
     if state.is_first and len(audio) < state.min_limit:
         logger.error("First chunk is too short, skipping")
         return None
 
+    # Mark that the first chunk has been processed
     state.is_first = False
+
     return audio
+
 
 
 def format_output_transcript(state, o) -> dict:
@@ -294,12 +353,6 @@ def format_output_transcript(state, o) -> dict:
         logger.debug("No text in this segment")
         return None
 
-# Define WebSocket endpoint
-import uuid
-
-import time
-import logging
-from functools import wraps
 
 
 def perf(func):
@@ -363,7 +416,7 @@ async def websocket_endpoint(websocket: WebSocket, save_audio: bool = True):
     logger.info("WebSocket connection established successfully.")
 
     parsed_args = args.parse_args([
-        '--lan', 'en',
+        '--lan', 'he',
         '--model', 'ivrit-ai/faster-whisper-v2-d4',
         # '--model', 'ivrit-ai/whisper-large-v3-turbo-d4-p1-take2',
         '--backend', 'faster-whisper',
@@ -371,8 +424,8 @@ async def websocket_endpoint(websocket: WebSocket, save_audio: bool = True):
         "--vac",
         "-l", "DEBUG",
         # "--buffer_trimming", "sentence",
-        "--buffer_trimming_sec", "2",
-        "--min-chunk-size", "2"
+        "--buffer_trimming_sec", "8",
+        "--min-chunk-size", "1"
     ])
 
     # Optionally create a unique .wav file for debugging
@@ -403,7 +456,7 @@ async def websocket_endpoint(websocket: WebSocket, save_audio: bool = True):
 
     @perf
     def process(audio):
-        state.online.insert_audio_chunk(a)
+        state.online.insert_audio_chunk(audio)
         logger.info(f"Processing audio chunk..., now having {get_next_processing_duration(state.online):.2f} seconds")
         o = state.online.process_iter()
         logger.info(f"After processing, buffer of {get_next_processing_duration(state.online):.2f} seconds left")

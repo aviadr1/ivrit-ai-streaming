@@ -9,9 +9,11 @@ import os
 import librosa
 import numpy as np
 import soundfile
+import math
 
 # Define the default WebSocket endpoint
 DEFAULT_WS_URL = "ws://localhost:8000/ws"
+# DEFAULT_WS_URL = "ws://localhost:8000/v1/audio/transcriptions/"
 
 
 def parse_arguments():
@@ -29,7 +31,7 @@ def parse_arguments():
     )
     parser.add_argument("--temperature", type=float, default=0.0, help="Temperature for transcription.")
     parser.add_argument("--vad_filter", action="store_true", help="Enable voice activity detection filter.")
-    parser.add_argument("--chunk_duration", type=float, default=1.0, help="Duration of each audio chunk in seconds.")
+    parser.add_argument("--chunk_duration", type=float, default=1, help="Duration of each audio chunk in seconds.")
     return parser.parse_args()
 
 
@@ -54,7 +56,7 @@ def read_audio_in_chunks(audio_file, target_sr=16000, chunk_duration=1) -> List[
         audio_data = f.read(dtype='int16')
 
     # Calculate the number of samples per chunk
-    samples_per_chunk = target_sr * chunk_duration
+    samples_per_chunk = int(math.ceil(target_sr * chunk_duration))
 
     # Split the audio into chunks
     chunks = [
@@ -65,14 +67,40 @@ def read_audio_in_chunks(audio_file, target_sr=16000, chunk_duration=1) -> List[
     return chunks
 
 
+import time
+
+
 async def send_audio_chunks(ws, audio_chunks):
     """
-    Asynchronously send audio chunks to the WebSocket server.
+    Asynchronously send audio chunks to the WebSocket server in real-time,
+    ensuring no more than 10 seconds of audio is sent faster than real time.
+
+    Args:
+        ws: The WebSocket connection.
+        audio_chunks: The list of audio chunks to send.
+        chunk_duration: The duration of each chunk in seconds.
     """
+    start_time = time.time()  # Record the start time
+    total_sent_duration = 0  # Track total duration of audio sent
+    realtime_gap = 4  # Maximum gap between real-time and audio sent
     for idx, chunk in enumerate(audio_chunks):
+        # Send the current audio chunk
         await ws.send(chunk.tobytes())
-        print(f"Sent chunk {idx + 1}/{len(audio_chunks)}")
-        await asyncio.sleep(0.9)  # Simulate real-time streaming
+        chunk_duration = len(chunk) / 16000  # Calculate the duration of the chunk in seconds
+        total_sent_duration += chunk_duration  # Update the total duration of audio sent
+        print(f"Sent chunk {idx + 1}/{len(audio_chunks)}, total audio duration sent: {total_sent_duration:.2f}s")
+
+        # Check if we've sent more than 10 seconds of audio in less time
+        elapsed_real_time = time.time() - start_time
+        if total_sent_duration - elapsed_real_time > realtime_gap:
+            # Wait for real time to catch up before sending more
+            sleep_time = total_sent_duration - elapsed_real_time - realtime_gap
+            print(f"Pausing for {sleep_time:.2f}s to match real-time streaming...")
+            await asyncio.sleep(sleep_time)
+
+        # Simulate sending in real-time (wait for the duration of the chunk)
+        await asyncio.sleep(chunk_duration*0.5)
+
     print("All audio chunks sent")
 
 
@@ -80,9 +108,9 @@ async def websocket_client(args):
     """
     Asynchronously connect to the WebSocket server, send audio chunks, and receive transcriptions.
     """
-    audio_chunks = read_audio_in_chunks(args.audio_file)
+    audio_chunks = read_audio_in_chunks(args.audio_file, chunk_duration=args.chunk_duration)
 
-    async with websockets.asyncio.client.connect(args.url, ping_interval=1, ping_timeout=10) as ws:
+    async with websockets.asyncio.client.connect(args.url, ping_interval=1, ping_timeout=30) as ws:
         print("WebSocket connection opened")
 
         # Start sending audio chunks
@@ -99,7 +127,6 @@ async def websocket_client(args):
             print(f"Error receiving message: {e}")
 
         await send_task  # Ensure all chunks are sent before closing
-
 
 
 if __name__ == "__main__":
