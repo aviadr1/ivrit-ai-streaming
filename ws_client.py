@@ -3,17 +3,16 @@ import asyncio
 import json
 import math
 import os
+import time
 from pathlib import Path
 from typing import List
 
 import numpy as np
 import soundfile
-import websockets
 import websockets.asyncio.client
 
 # Define the default WebSocket endpoint
 DEFAULT_WS_URL = "ws://localhost:8000/ws"
-# DEFAULT_WS_URL = "ws://localhost:8000/v1/audio/transcriptions/"
 
 
 def parse_arguments():
@@ -63,9 +62,6 @@ def read_audio_in_chunks(audio_file, target_sr=16000, chunk_duration=1) -> List[
     chunks = [audio_data[i : i + samples_per_chunk] for i in range(0, len(audio_data), samples_per_chunk)]
 
     return chunks
-
-
-import time
 
 
 async def send_audio_chunks(ws, audio_chunks):
